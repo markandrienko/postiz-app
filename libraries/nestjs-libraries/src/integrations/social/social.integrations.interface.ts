@@ -230,4 +230,7 @@ export interface SocialProvider
     accessToken: string,
     data: any
   ): Promise<FetchPageInformationResult>;
+  // Revokes the channel's authorization at the platform when the channel is
+  // deleted, for platforms whose API terms require it (best effort).
+  revokeToken?(accessToken: string, refreshToken?: string): Promise<void>;
 }
