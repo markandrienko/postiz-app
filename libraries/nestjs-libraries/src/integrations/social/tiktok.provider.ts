@@ -36,8 +36,11 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
   name = 'Tiktok';
   isBetweenSteps = false;
   convertToJPEG = true;
+  // video.list is not requested: it is not offered to this app in the TikTok
+  // developer portal, and asking for a scope the app does not have blocks the
+  // whole authorization. Without it analytics() returns only the account
+  // stats, and postAnalytics() and missing() return empty results.
   scopes = [
-    'video.list',
     'user.info.basic',
     'video.publish',
     'video.upload',
