@@ -32,6 +32,8 @@ export function Login() {
     appleClientId,
     billingEnabled,
     genericOauth,
+    termsUrl,
+    privacyPolicyUrl,
   } = useVariables();
   const resolver = useMemo(() => {
     return classValidatorResolver(LoginUserDto);
@@ -131,6 +133,38 @@ export function Login() {
                   >
                     {t('resend_activation_email', 'Resend Activation Email')}
                   </Link>
+                </div>
+              )}
+              {(!!termsUrl || !!privacyPolicyUrl) && (
+                <div className="text-[12px]">
+                  {t(
+                    'by_signing_in_you_agree_to_our',
+                    'By signing in you agree to our'
+                  )}
+                  &nbsp;
+                  {!!termsUrl && (
+                    <a
+                      href={termsUrl}
+                      className="underline hover:font-bold"
+                      rel="nofollow"
+                    >
+                      {t('terms_of_service', 'Terms of Service')}
+                    </a>
+                  )}
+                  {!!termsUrl && !!privacyPolicyUrl && (
+                    <>
+                      &nbsp;{t('and', 'and')}&nbsp;
+                    </>
+                  )}
+                  {!!privacyPolicyUrl && (
+                    <a
+                      href={privacyPolicyUrl}
+                      rel="nofollow"
+                      className="underline hover:font-bold"
+                    >
+                      {t('privacy_policy', 'Privacy Policy')}
+                    </a>
+                  )}
                 </div>
               )}
               <div className="text-center mt-6">

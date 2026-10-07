@@ -387,7 +387,49 @@ export class IntegrationService {
   }
 
   async deleteChannel(org: string, id: string) {
+    await this.revokeChannelAccess(org, id);
     return this._integrationRepository.deleteChannel(org, id);
+  }
+
+  // Some platforms (YouTube, TikTok) require the app to revoke its access as
+  // soon as the user disconnects a channel. A platform revoke can drop the
+  // whole grant of the user (e.g. every channel connected with the same Google
+  // account), so it only runs when no other active channel of that provider
+  // exists. Best effort: it never blocks or fails deleting the channel.
+  private async revokeChannelAccess(org: string, id: string) {
+    try {
+      const integration = await this._integrationRepository.getIntegrationById(
+        org,
+        id
+      );
+      if (!integration || integration.deletedAt) {
+        return;
+      }
+
+      const provider = this._integrationManager.getSocialIntegration(
+        integration.providerIdentifier
+      );
+      if (!provider?.revokeToken) {
+        return;
+      }
+
+      const others =
+        await this._integrationRepository.countOtherActiveIntegrations(
+          integration.providerIdentifier,
+          integration.id
+        );
+      if (others > 0) {
+        return;
+      }
+
+      provider
+        .revokeToken(integration.token, integration.refreshToken || undefined)
+        .catch((err) => {
+          console.log('Failed to revoke channel access:', id, err);
+        });
+    } catch (err) {
+      console.log('Failed to revoke channel access:', id, err);
+    }
   }
 
   async disableIntegrations(org: string, totalChannels: number) {
