@@ -1,0 +1,99 @@
+---
+name: "Build Fork Container"
+
+# Builds this fork's image and pushes it to ghcr.io/<owner>/<repo>:<version>.
+# Manual runs only, so it never overlaps with build-containers.yml, which
+# pushes to ghcr.io/gitroomhq on every tag push. amd64 only: the production
+# server is x86_64. A version that already exists is never overwritten, so a
+# tag pinned in docker-compose.yml always points at the same image.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag, e.g. v1.0.0-andmark.1"
+        required: true
+        type: string
+
+concurrency:
+  group: build-fork-container
+  cancel-in-progress: false
+
+jobs:
+  build-container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Get Container Image
+        id: getcontainerimage
+        env:
+          CONTAINERVER: ${{ inputs.version }}
+        run: |
+          if ! [[ "$CONTAINERVER" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid version '$CONTAINERVER': use letters, digits, '.', '_' and '-' (max 128)."
+            exit 1
+          fi
+          echo "containerimage=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Check Version Is New
+        env:
+          CONTAINERIMAGE: ${{ steps.getcontainerimage.outputs.containerimage }}
+          CONTAINERVER: ${{ inputs.version }}
+        run: |
+          # Only "no such tag" / "no such package yet" may continue; any other
+          # failure (timeout, 5xx, rate limit) stops the run instead of risking
+          # an overwrite.
+          if INSPECT=$(docker buildx imagetools inspect "$CONTAINERIMAGE:$CONTAINERVER" 2>&1); then
+            echo "::error::$CONTAINERIMAGE:$CONTAINERVER already exists. Run again with a new version."
+            exit 1
+          fi
+          if ! grep -qiE 'not found|manifest_unknown|name_unknown|denied' <<< "$INSPECT"; then
+            echo "$INSPECT"
+            echo "::error::Could not check whether $CONTAINERIMAGE:$CONTAINERVER exists."
+            exit 1
+          fi
+
+      - name: Build and Push Image
+        env:
+          CONTAINERIMAGE: ${{ steps.getcontainerimage.outputs.containerimage }}
+          CONTAINERVER: ${{ inputs.version }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f Dockerfile.dev \
+            -t "$CONTAINERIMAGE:$CONTAINERVER" \
+            --build-arg NEXT_PUBLIC_VERSION="$CONTAINERVER" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --pull \
+            --no-cache \
+            --provenance=false --sbom=false \
+            --output "type=registry,name=$CONTAINERIMAGE:$CONTAINERVER" .
+
+      - name: Verify Image
+        env:
+          CONTAINERIMAGE: ${{ steps.getcontainerimage.outputs.containerimage }}
+          CONTAINERVER: ${{ inputs.version }}
+        run: |
+          docker buildx imagetools inspect "$CONTAINERIMAGE:$CONTAINERVER" | tee inspect.txt
+          {
+            echo "Pushed \`$CONTAINERIMAGE:$CONTAINERVER\` from \`$GITHUB_REF_NAME\` @ \`$GITHUB_SHA\`"
+            echo
+            echo "\`$(grep -m1 '^Digest:' inspect.txt)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
