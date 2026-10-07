@@ -417,6 +417,39 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
+  // Called when the channel is deleted: TikTok's developer terms expect the app
+  // to stop holding access once the user disconnects.
+  async revokeToken(accessToken: string, refreshToken?: string) {
+    const revoke = async (token: string) => {
+      const response = await fetch(
+        'https://open.tiktokapis.com/v2/oauth/revoke/',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            client_key: process.env.TIKTOK_CLIENT_ID!,
+            client_secret: process.env.TIKTOK_CLIENT_SECRET!,
+            token,
+          }).toString(),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+      // TikTok can answer 200 with an error object in the body.
+      const body = await response.text();
+      return response.ok && !/"error"\s*:\s*"(?!ok")[^"]+"/.test(body);
+    };
+
+    if ((await revoke(accessToken)) || !refreshToken) {
+      return;
+    }
+
+    // The stored access token only lives 24 hours: get a fresh one to revoke.
+    const { accessToken: freshToken } = await this.refreshToken(refreshToken);
+    await revoke(freshToken);
+  }
+
   async maxVideoLength(accessToken: string) {
     const {
       data: { max_video_post_duration_sec },
@@ -436,6 +469,61 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     return {
       maxDurationSeconds: max_video_post_duration_sec,
     };
+  }
+
+  // Called from the post editor (POST /integrations/function) so the Direct
+  // Post UI follows the creator's current settings, as TikTok's Content Sharing
+  // Guidelines require: the nickname of the account being posted to, the
+  // privacy levels it allows, interactions disabled in the TikTok app, and the
+  // maximum video duration. When TikTok refuses the query because the account
+  // cannot post right now (e.g. spam_risk_too_many_posts), canPost is false and
+  // error carries the reason to show the user.
+  async creatorInfo(accessToken: string) {
+    try {
+      const body = await (
+        await this.fetch(
+          'https://open.tiktokapis.com/v2/post/publish/creator_info/query/',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8',
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+          '',
+          0,
+          true
+        )
+      ).text();
+
+      const { data, error } = JSON.parse(body || '{}');
+      if (error?.code && error.code !== 'ok') {
+        return {
+          canPost: false,
+          error: this.handleErrors(body)?.value || error.message || '',
+        };
+      }
+
+      return {
+        canPost: true,
+        nickname: data?.creator_nickname || '',
+        username: data?.creator_username || '',
+        privacyLevelOptions: (data?.privacy_level_options || []) as string[],
+        commentDisabled: !!data?.comment_disabled,
+        duetDisabled: !!data?.duet_disabled,
+        stitchDisabled: !!data?.stitch_disabled,
+        maxVideoPostDurationSec: data?.max_video_post_duration_sec || 0,
+      };
+    } catch (err) {
+      if (err instanceof RefreshToken || err instanceof Disconnect) {
+        throw err;
+      }
+
+      return {
+        canPost: false,
+        error: err instanceof BadBody ? err.message : '',
+      };
+    }
   }
 
   // Single status check for a publish_id, no loops and no timers: `post` returns

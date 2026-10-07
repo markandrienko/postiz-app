@@ -98,6 +98,8 @@ export function RegisterAfter({
     neynarClientId,
     appleClientId,
     billingEnabled,
+    termsUrl,
+    privacyPolicyUrl,
   } = useVariables();
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -228,7 +230,7 @@ export function RegisterAfter({
                 )}
                 &nbsp;
                 <a
-                  href={`https://postiz.com/terms`}
+                  href={termsUrl || `https://postiz.com/terms`}
                   className="underline hover:font-bold"
                   rel="nofollow"
                 >
@@ -237,7 +239,7 @@ export function RegisterAfter({
                 &nbsp;
                 {t('and', 'and')}&nbsp;
                 <a
-                  href={`https://postiz.com/privacy`}
+                  href={privacyPolicyUrl || `https://postiz.com/privacy`}
                   rel="nofollow"
                   className="underline hover:font-bold"
                 >

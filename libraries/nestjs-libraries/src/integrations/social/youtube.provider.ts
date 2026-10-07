@@ -60,14 +60,16 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
   name = 'YouTube';
   isBetweenSteps = true;
   dto = YoutubeSettingsDto;
+  // Only the scopes the provider actually uses (YouTube API Services Developer
+  // Policies III.D.2.a.ii): userinfo.profile for the channel owner's id, name
+  // and picture; youtube.upload for videos.insert and thumbnails.set;
+  // youtube.readonly for channels.list and videos.list; yt-analytics.readonly
+  // for reports.query. Channels connected with the previous, broader list keep
+  // working, since checkScopes only requires these to be granted.
   scopes = [
     'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/youtube',
-    'https://www.googleapis.com/auth/youtube.force-ssl',
     'https://www.googleapis.com/auth/youtube.readonly',
     'https://www.googleapis.com/auth/youtube.upload',
-    'https://www.googleapis.com/auth/youtubepartner',
     'https://www.googleapis.com/auth/yt-analytics.readonly',
   ];
 
@@ -257,6 +259,15 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     }
 
     return undefined;
+  }
+
+  // Called when the channel is deleted: YouTube API Services Developer Policies
+  // (III.D.2.c) require the token to be revoked right away when the user
+  // revokes consent through the app. Revoking the refresh token revokes the
+  // whole grant.
+  async revokeToken(accessToken: string, refreshToken?: string) {
+    const { client } = clientAndYoutube();
+    await client.revokeToken(refreshToken || accessToken);
   }
 
   async refreshToken(refresh_token: string): Promise<AuthTokenDetails> {

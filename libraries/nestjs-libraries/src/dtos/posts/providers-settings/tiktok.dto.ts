@@ -1,5 +1,6 @@
 import {
-  IsBoolean, ValidateIf, IsIn, IsString, MaxLength, IsOptional, IsDefined, IsNumber, Min, Max, ValidateNested
+  IsBoolean, ValidateIf, IsIn, IsString, MaxLength, IsOptional, IsDefined, IsNumber, Min, Max, ValidateNested,
+  registerDecorator, ValidationArguments, ValidationOptions, ValidatorConstraint, ValidatorConstraintInterface
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JSONSchema } from 'class-validator-jsonschema';
@@ -58,6 +59,40 @@ export class TikTokLocation {
   address?: string;
 }
 
+// "Disclose Video Content" is a switch of the post editor only (stored in the
+// settings, not sent to TikTok). TikTok's Content Sharing Guidelines block
+// publishing while it is on and neither "Your brand" (brand_organic_toggle)
+// nor "Branded content" (brand_content_toggle) is chosen.
+@ValidatorConstraint({ name: 'IsTikTokDisclosureChosen', async: false })
+export class IsTikTokDisclosureChosenConstraint
+  implements ValidatorConstraintInterface
+{
+  validate(value: unknown, args: ValidationArguments): boolean {
+    const settings = args.object as TikTokDto & { disclose?: boolean };
+    return !(
+      settings?.disclose === true &&
+      settings?.content_posting_method !== 'UPLOAD' &&
+      !settings?.brand_content_toggle &&
+      !value
+    );
+  }
+
+  defaultMessage(_args: ValidationArguments): string {
+    return 'You need to indicate if your content promotes yourself, a third party, or both';
+  }
+}
+
+export function IsTikTokDisclosureChosen(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: IsTikTokDisclosureChosenConstraint,
+    });
+  };
+}
+
 // TikTok only honors most of these settings on a DIRECT_POST. With
 // content_posting_method=UPLOAD the media lands in the user's TikTok inbox as a
 // draft, and TikTok's inbox/upload endpoints accept nothing but the title /
@@ -67,7 +102,10 @@ export class TikTokLocation {
 // music / location are TikTok Business only: the legacy TikTok provider ignores
 // them (its Content Posting API has no music_sound_info / location fields).
 // Fields stay required here (existing clients depend on it); the constraints are
-// documented, not enforced.
+// documented, not enforced. The exceptions are the rules TikTok's Content
+// Sharing Guidelines make the publish UI enforce: privacy_level has no default
+// on DIRECT_POST, and a disclosed post must say whether it promotes the
+// creator's brand, a third party, or both.
 export class TikTokDto {
   @ValidateIf((p) => p.title)
   @MaxLength(90)
@@ -77,16 +115,23 @@ export class TikTokDto {
   })
   title: string;
 
-  @IsIn([
-    'PUBLIC_TO_EVERYONE',
-    'MUTUAL_FOLLOW_FRIENDS',
-    'FOLLOWER_OF_CREATOR',
-    'SELF_ONLY',
-  ])
-  @IsString()
+  // TikTok's Content Sharing Guidelines require the user to pick the privacy
+  // level manually (no default), so the editor leaves it empty and this check
+  // asks for it. UPLOAD ignores it, so it is not required there.
+  @ValidateIf((p) => p.content_posting_method !== 'UPLOAD')
+  @IsIn(
+    [
+      'PUBLIC_TO_EVERYONE',
+      'MUTUAL_FOLLOW_FRIENDS',
+      'FOLLOWER_OF_CREATOR',
+      'SELF_ONLY',
+    ],
+    { message: 'Choose who can see this post' }
+  )
+  @IsString({ message: 'Choose who can see this post' })
   @JSONSchema({
     description:
-      'Applied only when content_posting_method=DIRECT_POST. Ignored by TikTok on UPLOAD.',
+      'Required when content_posting_method=DIRECT_POST. Ignored by TikTok on UPLOAD.',
   })
   privacy_level:
     | 'PUBLIC_TO_EVERYONE'
@@ -140,6 +185,7 @@ export class TikTokDto {
   video_made_with_ai: boolean;
 
   @IsBoolean()
+  @IsTikTokDisclosureChosen()
   @JSONSchema({
     description:
       'Applied only when content_posting_method=DIRECT_POST. Ignored by TikTok on UPLOAD.',

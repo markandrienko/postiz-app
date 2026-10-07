@@ -778,6 +778,18 @@ export class IntegrationRepository {
     });
   }
 
+  countOtherActiveIntegrations(providerIdentifier: string, excludeId: string) {
+    return this._integration.model.integration.count({
+      where: {
+        providerIdentifier,
+        deletedAt: null,
+        id: {
+          not: excludeId,
+        },
+      },
+    });
+  }
+
   deleteChannel(org: string, id: string) {
     return this._integration.model.integration.update({
       where: {
