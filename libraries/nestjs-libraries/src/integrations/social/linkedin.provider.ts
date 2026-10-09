@@ -61,15 +61,13 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   oneTimeToken = true;
 
   isBetweenSteps = false;
-  scopes = [
-    'openid',
-    'profile',
-    'w_member_social',
-    'r_basicprofile',
-    'rw_organization_admin',
-    'w_organization_social',
-    'r_organization_social',
-  ];
+  // Only the scopes of the self-serve products "Sign In with LinkedIn using
+  // OpenID Connect" and "Share on LinkedIn": the organization scopes belong to
+  // the Community Management API, which this app does not have, and asking
+  // for a scope the app lacks makes LinkedIn reject the whole authorization.
+  // Without r_basicprofile the profile handle is not returned and company
+  // mentions cannot be looked up. LinkedinPageProvider keeps its own list.
+  scopes = ['openid', 'profile', 'w_member_social'];
   override maxConcurrentJob = 2;
   refreshWait = true;
   editor = 'normal' as const;
@@ -282,10 +280,12 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
     ).json();
 
     return {
-      options: elements.map((e: { localizedName: string; id: string }) => ({
-        label: e.localizedName,
-        value: `@[${e.localizedName}](urn:li:organization:${e.id})`,
-      }))?.[0],
+      options: (elements || []).map(
+        (e: { localizedName: string; id: string }) => ({
+          label: e.localizedName,
+          value: `@[${e.localizedName}](urn:li:organization:${e.id})`,
+        })
+      )?.[0],
     };
   }
 
@@ -1221,7 +1221,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       )
     ).json();
 
-    return elements.map((p: any) => ({
+    return (elements || []).map((p: any) => ({
       id: String(p.id),
       label: p.localizedName,
       image:
