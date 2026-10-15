@@ -68,7 +68,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   // Without r_basicprofile the profile handle is not returned and company
   // mentions cannot be looked up. LinkedinPageProvider keeps its own list.
   scopes = ['openid', 'profile', 'w_member_social'];
-  override maxConcurrentJob = 2;
+  override maxConcurrentJob = 8; // LinkedIn limits are daily budgets
   refreshWait = true;
   editor = 'normal' as const;
   dto = LinkedinDto;
