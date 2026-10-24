@@ -161,6 +161,16 @@ export class PublicController {
       return res.status(400).send('Invalid video URL');
     }
 
+    // Pass the browser's byte range on, so the <video> element can seek (the
+    // thumbnail frame picker scrubs through the video). Only a single `bytes=`
+    // range is forwarded, like the /api/uploads route accepts. identity
+    // encoding keeps content-length and content-range in step with the bytes
+    // piped back, as in YoutubeProvider.youtubeChunkStream.
+    const range =
+      req.headers.range && /^bytes=(\d+-\d*|-\d+)$/.test(req.headers.range)
+        ? req.headers.range
+        : undefined;
+
     const ac = new AbortController();
     const onClose = () => ac.abort();
     req.on('aborted', onClose);
@@ -180,6 +190,10 @@ export class PublicController {
       r = await fetch(currentUrl, {
         signal: ac.signal,
         redirect: 'manual',
+        headers: {
+          'accept-encoding': 'identity',
+          ...(range ? { Range: range } : {}),
+        },
         // @ts-ignore — undici option, not in lib.dom fetch types
         dispatcher: ssrfSafeDispatcher,
       });
@@ -208,6 +222,14 @@ export class PublicController {
       return res.status(508).send('Too many redirects');
     }
 
+    // A range past the end of the file: answer like the upstream did, so the
+    // browser stops asking instead of getting an error page.
+    if (r.status === 416) {
+      const unsatisfiedRange = r.headers.get('content-range');
+      if (unsatisfiedRange) res.setHeader('Content-Range', unsatisfiedRange);
+      return res.status(416).end();
+    }
+
     if (!r.ok && r.status !== 206) {
       res.status(r.status);
       throw new Error(`Upstream error: ${r.statusText}`);
@@ -222,8 +244,12 @@ export class PublicController {
     const len = r.headers.get('content-length');
     if (len) res.setHeader('Content-Length', len);
 
-    const acceptRanges = r.headers.get('accept-ranges') ?? 'bytes';
-    res.setHeader('Accept-Ranges', acceptRanges);
+    // Only advertise ranges the upstream really serves: claiming `bytes` while
+    // answering every request with the whole file kept the browser from
+    // seeking. A 206 answer proves range support even without the header.
+    const acceptRanges =
+      r.headers.get('accept-ranges') ?? (r.status === 206 ? 'bytes' : null);
+    if (acceptRanges) res.setHeader('Accept-Ranges', acceptRanges);
 
     if (r.status === 206) res.status(206); // Partial Content for range responses
 
