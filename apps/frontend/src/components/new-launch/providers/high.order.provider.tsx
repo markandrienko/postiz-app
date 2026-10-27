@@ -22,6 +22,10 @@ import { InternalChannels } from '@gitroom/frontend/components/launches/internal
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import SafeImage from '@gitroom/react/helpers/safe.image';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 import { useMediaSettingsValues } from '@gitroom/frontend/components/new-launch/media.settings.section';
 
 class Empty {
@@ -329,13 +333,19 @@ export const withProvider = function <T extends object>(params: {
                           className="min-w-[42px] min-h-[42px] w-[42px] h-[42px] rounded-full"
                           src={selectedIntegration?.integration.picture}
                         />
-                        <SafeImage
-                          alt={selectedIntegration?.integration.identifier}
-                          width={16}
-                          height={16}
-                          className="rounded-[16px] min-w-[16px] min-h-[16px] w-[16px] h-[16px] absolute bottom-0 end-0"
-                          src={`/icons/platforms/${selectedIntegration?.integration.identifier}.png`}
-                        />
+                        {isYoutube(
+                          selectedIntegration?.integration.identifier
+                        ) ? (
+                          <YoutubeIcon className="absolute z-10 -bottom-[2px] -end-[8px]" />
+                        ) : (
+                          <SafeImage
+                            alt={selectedIntegration?.integration.identifier}
+                            width={16}
+                            height={16}
+                            className="rounded-[16px] min-w-[16px] min-h-[16px] w-[16px] h-[16px] absolute bottom-0 end-0"
+                            src={`/icons/platforms/${selectedIntegration?.integration.identifier}.png`}
+                          />
+                        )}
                       </div>
                       <div className="text-[20px]">{selectedIntegration?.integration.name}</div>
                     </div>

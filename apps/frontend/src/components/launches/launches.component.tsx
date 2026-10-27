@@ -34,6 +34,10 @@ import { HubspotInstalled } from '@gitroom/frontend/components/launches/hubspot.
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { Input } from '@gitroom/react/form/input';
 import { Button } from '@gitroom/react/form/button';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 export const SVGLine = () => {
   return (
@@ -375,7 +379,10 @@ export const MenuComponent: FC<
       <div
         className={clsx(
           'relative gap-[6px] flex justify-center items-center',
-          integration.disabled && 'opacity-50'
+          // the YouTube icon must keep its colors, so it is dimmed on the avatar only
+          integration.disabled &&
+            !isYoutube(integration.identifier) &&
+            'opacity-50'
         )}
       >
         <div className="h-full w-[4px] -ms-[12px] rounded-s-[3px] opacity-0 group-hover/profile:opacity-100 transition-opacity">
@@ -399,17 +406,20 @@ export const MenuComponent: FC<
         <ImageWithFallback
           fallbackSrc={'/no-picture.jpg'}
           src={integration.picture || '/no-picture.jpg'}
-          className="rounded-[8px] min-w-[36px] min-h-[36px]"
+          className={clsx(
+            'rounded-[8px] min-w-[36px] min-h-[36px]',
+            integration.disabled &&
+              isYoutube(integration.identifier) &&
+              'opacity-50'
+          )}
           alt={integration.identifier}
           width={36}
           height={36}
         />
-        {integration.identifier === 'youtube' ? (
-          <img
-            src="/icons/platforms/youtube.svg"
-            className="absolute z-10 bottom-[5px] -end-[5px]"
-            width={20}
-          />
+        {isYoutube(integration.identifier) ? (
+          // above the reconnect overlay (z-[199]) so it is never covered;
+          // clicks pass through to the overlay
+          <YoutubeIcon className="absolute z-[201] pointer-events-none -bottom-[4px] -end-[8px]" />
         ) : (
           <SafeImage
             src={`/icons/platforms/${integration.identifier}.png`}
@@ -767,7 +777,12 @@ export const LaunchesComponent = () => {
                 {sortedIntegrations.slice(0, 3).map((integration: any) => (
                   <ImageWithFallback
                     key={integration.id}
-                    fallbackSrc={`/icons/platforms/${integration.identifier}.png`}
+                    fallbackSrc={
+                      // the YouTube icon can't be cropped round or overlapped
+                      isYoutube(integration.identifier)
+                        ? '/no-picture.jpg'
+                        : `/icons/platforms/${integration.identifier}.png`
+                    }
                     src={integration.picture}
                     className="rounded-full border-2 border-btnSimple"
                     alt={integration.identifier}

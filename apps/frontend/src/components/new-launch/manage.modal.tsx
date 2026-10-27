@@ -70,6 +70,10 @@ import {
   MediaSettingsSection,
   useMediaSettingsValues,
 } from '@gitroom/frontend/components/new-launch/media.settings.section';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 export const ManageModal: FC<AddEditModalProps> = (props) => {
   const t = useT();
@@ -174,17 +178,29 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
     return (
       <div className="flex items-center gap-[10px]">
-        <div className="relative mobile:hidden">
-          <img
-            src={`/icons/platforms/${currentIntegration.identifier}.png`}
-            className="w-[20px] h-[20px] rounded-[4px]"
-            alt={currentIntegration.identifier}
-          />
-          <SettingsIcon
-            size={15}
-            className="text-white absolute -end-[5px] -bottom-[5px]"
-          />
-        </div>
+        {isYoutube(currentIntegration.identifier) ? (
+          // the YouTube icon must stay fully visible: the settings icon goes
+          // next to it instead of over it, and it sits on a solid white
+          // background for contrast on the purple bar
+          <div className="flex items-center gap-[8px] mobile:hidden">
+            <SettingsIcon size={15} className="text-white" />
+            <div className="bg-white rounded-[4px] px-[4px] py-[2px]">
+              <YoutubeIcon />
+            </div>
+          </div>
+        ) : (
+          <div className="relative mobile:hidden">
+            <img
+              src={`/icons/platforms/${currentIntegration.identifier}.png`}
+              className="w-[20px] h-[20px] rounded-[4px]"
+              alt={currentIntegration.identifier}
+            />
+            <SettingsIcon
+              size={15}
+              className="text-white absolute -end-[5px] -bottom-[5px]"
+            />
+          </div>
+        )}
         <div>
           {currentIntegration.name} {t('channel_settings', 'Settings')}
         </div>

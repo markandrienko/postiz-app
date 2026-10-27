@@ -9,6 +9,10 @@ import { capitalize } from 'lodash';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { hasLinks } from '@gitroom/helpers/utils/strip.links';
 import { countLength } from '@gitroom/helpers/utils/count.length';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 const Valid: FC = () => {
   return (
@@ -264,13 +268,17 @@ export const InformationComponent: FC<{
               {selectedIntegrations.map((p, index) => (
                 <Fragment key={p.integration.id}>
                   <div>
-                    <SafeImage
-                      src={`/icons/platforms/${p.integration.identifier}.png`}
-                      alt={p.integration.name}
-                      className="rounded-[4px] w-[16px] h-[16px] min-w-[16px] min-h-[16px]"
-                      width={16}
-                      height={16}
-                    />
+                    {isYoutube(p.integration.identifier) ? (
+                      <YoutubeIcon />
+                    ) : (
+                      <SafeImage
+                        src={`/icons/platforms/${p.integration.identifier}.png`}
+                        alt={p.integration.name}
+                        className="rounded-[4px] w-[16px] h-[16px] min-w-[16px] min-h-[16px]"
+                        width={16}
+                        height={16}
+                      />
+                    )}
                   </div>
                   <div
                     className={clsx(
