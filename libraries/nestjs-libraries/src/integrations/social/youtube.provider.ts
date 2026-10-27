@@ -61,6 +61,9 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
   identifier = 'youtube';
   name = 'YouTube';
   isBetweenSteps = true;
+  // YouTube API Services Developer Policies III.E.4: stored API data must be
+  // refreshed or deleted within 30 days
+  periodicDataRefresh = true;
   dto = YoutubeSettingsDto;
   // Only the scopes the provider actually uses (YouTube API Services Developer
   // Policies III.D.2.a.ii): userinfo.profile for the channel owner's id, name
@@ -280,6 +283,34 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     await client.revokeToken(refreshToken || accessToken);
   }
 
+  // Data retention (YouTube API Services Developer Policies III.E.4): of the
+  // given video ids, the ones YouTube no longer returns (deleted or removed
+  // videos). With the owner's token videos.list also returns private and
+  // unlisted videos; it takes up to 50 ids and costs 1 quota unit per call.
+  async missingReleaseIds(accessToken: string, releaseIds: string[]) {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const youtubeClient = youtube(client);
+
+    // only real video ids, never a placeholder such as 'missing'
+    const ids = [
+      ...new Set(releaseIds.filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id))),
+    ];
+
+    const missing: string[] = [];
+    for (let i = 0; i < ids.length; i += 50) {
+      const batch = ids.slice(i, i + 50);
+      const { data } = await youtubeClient.videos.list({
+        part: ['id'],
+        id: batch,
+      });
+      const found = new Set((data.items || []).map((video) => video.id));
+      missing.push(...batch.filter((id) => !found.has(id)));
+    }
+
+    return missing;
+  }
+
   refreshErrorMessage(err: any): string | undefined {
     const data = err?.response?.data || {};
     const text = `${data.error_subtype || ''} ${data.error_description || ''} ${
@@ -291,6 +322,12 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     }
 
     return undefined;
+  }
+
+  // Google answers a refresh with a revoked, expired or otherwise unusable
+  // grant with invalid_grant; anything else (5xx, network) is temporary
+  refreshErrorRevoked(err: any) {
+    return err?.response?.data?.error === 'invalid_grant';
   }
 
   async refreshToken(refresh_token: string): Promise<AuthTokenDetails> {

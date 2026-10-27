@@ -20,4 +20,15 @@ export class IntegrationsActivity {
   async refreshToken(integration: Integration) {
     return this._refreshIntegrationService.refresh(integration);
   }
+
+  // Data retention (dataRetentionWorkflow)
+  @ActivityMethod()
+  async refreshChannelsData(cursor: string | null) {
+    return this._integrationService.refreshChannelsData(cursor);
+  }
+
+  @ActivityMethod()
+  async clearExpiredChannelData() {
+    return this._integrationService.clearExpiredChannelData();
+  }
 }

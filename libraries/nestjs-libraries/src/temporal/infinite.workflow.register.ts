@@ -15,6 +15,16 @@ export class InfiniteWorkflowRegister implements OnModuleInit {
             taskQueue: 'main',
           });
       } catch (err) {}
+
+      // its own try: an already running missingPostWorkflow throws above
+      try {
+        await this._temporalService.client
+          ?.getRawClient()
+          ?.workflow?.start('dataRetentionWorkflow', {
+            workflowId: 'data-retention-workflow',
+            taskQueue: 'main',
+          });
+      } catch (err) {}
     }
   }
 }

@@ -185,6 +185,10 @@ export interface SocialProvider
   stripLinks?: () => boolean;
   refreshCron?: boolean;
   refreshErrorMessage?(err: any): string | undefined;
+  // True when a token refresh failed because the access is gone (revoked or
+  // expired grant), not because of a temporary error: the data retention
+  // workflow only marks a channel as disconnected on such a failure.
+  refreshErrorRevoked?(err: any): boolean;
   dto?: any;
   maxLength: (additionalSettings?: any, settings?: any) => number;
   checkValidity(
@@ -246,4 +250,19 @@ export interface SocialProvider
   // Revokes the channel's authorization at the platform when the channel is
   // deleted, for platforms whose API terms require it (best effort).
   revokeToken?(accessToken: string, refreshToken?: string): Promise<void>;
+  // Platforms whose API terms limit how long stored data may go without a
+  // refresh (YouTube API Services Developer Policies III.E.4: 30 days) set it
+  // to join the daily data retention workflow: it refreshes each channel's
+  // token, name and picture, clears the ids of published posts the platform
+  // no longer has (missingReleaseIds), and clears the platform data of
+  // channels that stay disconnected.
+  periodicDataRefresh?: boolean;
+  // Of the given release ids, the ones whose post no longer exists on the
+  // platform. Throws when the platform can't be asked, so an error never
+  // clears anything.
+  missingReleaseIds?(
+    accessToken: string,
+    releaseIds: string[],
+    integration: Integration
+  ): Promise<string[]>;
 }
