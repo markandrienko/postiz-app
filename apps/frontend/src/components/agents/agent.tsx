@@ -22,6 +22,10 @@ import { Integration } from '@prisma/client';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 export const MediaPortal: FC<{
   media: { path: string; id: string }[];
@@ -142,58 +146,80 @@ export const AgentList: FC<{ onChange: (arr: any[]) => void }> = ({
             'flex flex-col gap-[15px] mobile:flex-row mobile:gap-[12px] mobile:ps-[12px] mobile:pt-[6px]'
           )}
         >
-          {sortedIntegrations.map((integration, index) => (
-            <div
-              onClick={setIntegration(integration)}
-              key={integration.id}
-              className={clsx(
-                'flex gap-[12px] items-center group/profile justify-center hover:bg-boxHover rounded-e-[8px] hover:opacity-100 cursor-pointer mobile:shrink-0',
-                !selected.some((p) => p.id === integration.id) && 'opacity-20'
-              )}
-            >
+          {sortedIntegrations.map((integration, index) => {
+            const youtube = isYoutube(integration.identifier);
+            const notSelected = !selected.some((p) => p.id === integration.id);
+            // the YouTube icon must keep its colors: for YouTube the avatar
+            // and the name are dimmed instead of the whole row
+            const youtubeDim = notSelected
+              ? integration.disabled
+                ? 'opacity-10 group-hover/profile:opacity-50'
+                : 'opacity-20 group-hover/profile:opacity-100'
+              : integration.disabled && 'opacity-50';
+
+            return (
               <div
+                onClick={setIntegration(integration)}
+                key={integration.id}
                 className={clsx(
-                  'relative rounded-full flex justify-center items-center gap-[6px]',
-                  integration.disabled && 'opacity-50'
+                  'flex gap-[12px] items-center group/profile justify-center hover:bg-boxHover rounded-e-[8px] hover:opacity-100 cursor-pointer mobile:shrink-0',
+                  notSelected && !youtube && 'opacity-20'
                 )}
               >
-                {(integration.inBetweenSteps || integration.refreshNeeded) && (
-                  <div className="absolute start-0 top-0 w-[39px] h-[46px] cursor-pointer">
-                    <div className="bg-red-500 w-[15px] h-[15px] rounded-full start-0 -top-[5px] absolute z-[200] text-[10px] flex justify-center items-center">
-                      !
+                <div
+                  className={clsx(
+                    'relative rounded-full flex justify-center items-center gap-[6px]',
+                    integration.disabled && !youtube && 'opacity-50'
+                  )}
+                >
+                  {(integration.inBetweenSteps ||
+                    integration.refreshNeeded) && (
+                    <div className="absolute start-0 top-0 w-[39px] h-[46px] cursor-pointer">
+                      <div className="bg-red-500 w-[15px] h-[15px] rounded-full start-0 -top-[5px] absolute z-[200] text-[10px] flex justify-center items-center">
+                        !
+                      </div>
+                      <div className="bg-primary/60 w-[39px] h-[46px] start-0 top-0 absolute rounded-full z-[199]" />
                     </div>
-                    <div className="bg-primary/60 w-[39px] h-[46px] start-0 top-0 absolute rounded-full z-[199]" />
+                  )}
+                  <div className="h-full w-[4px] -ms-[12px] rounded-s-[3px] opacity-0 group-hover/profile:opacity-100 transition-opacity">
+                    <SVGLine />
                   </div>
-                )}
-                <div className="h-full w-[4px] -ms-[12px] rounded-s-[3px] opacity-0 group-hover/profile:opacity-100 transition-opacity">
-                  <SVGLine />
+                  <ImageWithFallback
+                    fallbackSrc={
+                      youtube
+                        ? '/no-picture.jpg'
+                        : `/icons/platforms/${integration.identifier}.png`
+                    }
+                    src={integration.picture}
+                    className={clsx('rounded-[8px]', youtube && youtubeDim)}
+                    alt={integration.identifier}
+                    width={36}
+                    height={36}
+                  />
+                  {youtube ? (
+                    // above the reconnect overlay (z-[199]) so it is never covered
+                    <YoutubeIcon className="absolute z-[201] pointer-events-none -bottom-[4px] -end-[8px]" />
+                  ) : (
+                    <SafeImage
+                      src={`/icons/platforms/${integration.identifier}.png`}
+                      className="rounded-[8px] absolute z-10 bottom-[5px] -end-[5px] border border-fifth"
+                      alt={integration.identifier}
+                      width={18.41}
+                      height={18.41}
+                    />
+                  )}
                 </div>
-                <ImageWithFallback
-                  fallbackSrc={`/icons/platforms/${integration.identifier}.png`}
-                  src={integration.picture}
-                  className="rounded-[8px]"
-                  alt={integration.identifier}
-                  width={36}
-                  height={36}
-                />
-                <SafeImage
-                  src={`/icons/platforms/${integration.identifier}.png`}
-                  className="rounded-[8px] absolute z-10 bottom-[5px] -end-[5px] border border-fifth"
-                  alt={integration.identifier}
-                  width={18.41}
-                  height={18.41}
-                />
+                <div
+                  className={clsx(
+                    'flex-1 whitespace-nowrap text-ellipsis overflow-hidden group-[.sidebar]:hidden mobile:hidden',
+                    youtube ? youtubeDim : integration.disabled && 'opacity-50'
+                  )}
+                >
+                  {integration.name}
+                </div>
               </div>
-              <div
-                className={clsx(
-                  'flex-1 whitespace-nowrap text-ellipsis overflow-hidden group-[.sidebar]:hidden mobile:hidden',
-                  integration.disabled && 'opacity-50'
-                )}
-              >
-                {integration.name}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

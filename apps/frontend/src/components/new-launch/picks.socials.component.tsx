@@ -9,14 +9,14 @@ import { useExistingData } from '@gitroom/frontend/components/launches/helpers/u
 import ImageWithFallback from '@gitroom/react/helpers/image.with.fallback';
 import { Check } from '@gitroom/frontend/components/launches/tags.component';
 import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 const PlatformBadge: FC<{ integration: Integrations }> = ({ integration }) => {
-  return integration.identifier === 'youtube' ? (
-    <img
-      src="/icons/platforms/youtube.svg"
-      className="absolute z-10 bottom-0 -end-[5px] min-w-[16px]"
-      width={16}
-    />
+  return isYoutube(integration.identifier) ? (
+    <YoutubeIcon className="absolute z-10 -bottom-[2px] -end-[8px]" />
   ) : (
     <SafeImage
       src={`/icons/platforms/${integration.identifier}.png`}
@@ -33,27 +33,43 @@ export const IntegrationListRow: FC<{
   integration: Integrations;
   selected: boolean;
   onClick: () => void;
-}> = ({ integration, selected, onClick }) => {
+  locked?: boolean;
+}> = ({ integration, selected, onClick, locked }) => {
+  // the YouTube icon must keep its colors: when locked, a YouTube row dims
+  // everything but the icon instead of the whole row
+  const youtube = isYoutube(integration.identifier);
+  const dimParts = locked && youtube && 'opacity-50';
+
   return (
     <div
       onClick={onClick}
-      className="flex items-center gap-[12px] py-[8px] cursor-pointer select-none"
+      className={clsx(
+        'flex items-center gap-[12px] py-[8px] cursor-pointer select-none',
+        locked && !youtube && 'opacity-50'
+      )}
     >
       <div className="relative">
         <ImageWithFallback
           fallbackSrc="/no-picture.jpg"
           src={integration.picture || '/no-picture.jpg'}
-          className="rounded-[8px] min-w-[40px] min-h-[40px]"
+          className={clsx('rounded-[8px] min-w-[40px] min-h-[40px]', dimParts)}
           alt={integration.identifier}
           width={40}
           height={40}
         />
         <PlatformBadge integration={integration} />
       </div>
-      <div className="flex-1 min-w-0 truncate text-[14px] font-[600]">
+      <div
+        className={clsx(
+          'flex-1 min-w-0 truncate text-[14px] font-[600]',
+          dimParts
+        )}
+      >
         {integration.name}
       </div>
-      <Check onChange={() => {}} value={selected} />
+      <div className={clsx(dimParts)}>
+        <Check onChange={() => {}} value={selected} />
+      </div>
     </div>
   );
 };
@@ -100,12 +116,13 @@ export const PicksSocialsComponent: FC<{
       <div
         className={clsx(
           'flex flex-col gap-[4px]',
-          locked && 'opacity-50 pointer-events-none'
+          locked && 'pointer-events-none'
         )}
       >
         {availableIntegrations.map((integration) => (
           <IntegrationListRow
             key={integration.id}
+            locked={locked}
             integration={integration}
             selected={selectedIntegrations.some(
               (p) => p.integration.id === integration.id
@@ -118,49 +135,55 @@ export const PicksSocialsComponent: FC<{
   }
 
   return (
-    <div className={clsx('flex', locked && 'opacity-50 pointer-events-none')}>
+    <div className={clsx('flex', locked && 'pointer-events-none')}>
       <div className="flex flex-1">
         <div className="innerComponent flex-1 flex">
           <div className="flex flex-wrap gap-[12px] flex-1">
-            {availableIntegrations.map((integration) => (
-              <div
-                key={integration.id}
-                className="flex gap-[8px] items-center"
-                {...(toolTip && {
-                  'data-tooltip-id': 'tooltip',
-                  'data-tooltip-content': integration.name,
-                })}
-              >
+            {availableIntegrations.map((integration) => {
+              const youtube = isYoutube(integration.identifier);
+              const notSelected =
+                selectedIntegrations.findIndex(
+                  (p) => p.integration.id === integration.id
+                ) === -1;
+
+              return (
                 <div
-                  onClick={toggleIntegration(integration)}
-                  className={clsx(
-                    'cursor-pointer border-[2px] relative rounded-full flex justify-center items-center bg-fifth filter transition-all duration-500',
-                    selectedIntegrations.findIndex(
-                      (p) => p.integration.id === integration.id
-                    ) === -1
-                      ? 'grayscale border-transparent'
-                      : 'border-[#622FF6]'
-                  )}
+                  key={integration.id}
+                  className="flex gap-[8px] items-center"
+                  {...(toolTip && {
+                    'data-tooltip-id': 'tooltip',
+                    'data-tooltip-content': integration.name,
+                  })}
                 >
-                  <ImageWithFallback
-                    fallbackSrc="/no-picture.jpg"
-                    src={integration.picture || '/no-picture.jpg'}
+                  <div
+                    onClick={toggleIntegration(integration)}
                     className={clsx(
-                      'rounded-full transition-all min-w-[42px] border-[1.5px] min-h-[42px]',
-                      selectedIntegrations.findIndex(
-                        (p) => p.integration.id === integration.id
-                      ) === -1
-                        ? 'border-transparent'
-                        : 'border-[#000]'
+                      'cursor-pointer border-[2px] relative rounded-full flex justify-center items-center bg-fifth filter transition-all duration-500',
+                      notSelected ? 'border-transparent' : 'border-[#622FF6]',
+                      // the YouTube icon must keep its colors, so for YouTube
+                      // only the avatar is grayed out or dimmed
+                      !youtube && notSelected && 'grayscale',
+                      !youtube && locked && 'opacity-50'
                     )}
-                    alt={integration.identifier}
-                    width={42}
-                    height={42}
-                  />
-                  <PlatformBadge integration={integration} />
+                  >
+                    <ImageWithFallback
+                      fallbackSrc="/no-picture.jpg"
+                      src={integration.picture || '/no-picture.jpg'}
+                      className={clsx(
+                        'rounded-full transition-all min-w-[42px] border-[1.5px] min-h-[42px]',
+                        notSelected ? 'border-transparent' : 'border-[#000]',
+                        youtube && notSelected && 'grayscale',
+                        youtube && locked && 'opacity-50'
+                      )}
+                      alt={integration.identifier}
+                      width={42}
+                      height={42}
+                    />
+                    <PlatformBadge integration={integration} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

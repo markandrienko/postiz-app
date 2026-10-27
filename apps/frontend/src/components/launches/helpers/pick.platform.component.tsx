@@ -7,6 +7,10 @@ import SafeImage from '@gitroom/react/helpers/safe.image';
 import { useCopilotAction, useCopilotReadable } from '@copilotkit/react-core';
 import { useStateCallback } from '@gitroom/react/helpers/use.state.callback';
 import { timer } from '@gitroom/helpers/utils/timer';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 export const PickPlatforms: FC<{
   integrations: Integrations[];
   selectedIntegrations: Integrations[];
@@ -237,26 +241,31 @@ export const PickPlatforms: FC<{
                         onClick={addPlatform(integration)}
                         className={clsx(
                           'cursor-pointer relative w-[34px] h-[34px] rounded-full flex justify-center items-center bg-fifth filter transition-all duration-500',
+                          // the YouTube icon must keep its colors, so for
+                          // YouTube only the avatar is dimmed
                           selectedAccounts.findIndex(
                             (p) => p.id === integration.id
-                          ) === -1
-                            ? 'opacity-40'
-                            : ''
+                          ) === -1 &&
+                            !isYoutube(integration.identifier) &&
+                            'opacity-40'
                         )}
                       >
                         <SafeImage
                           src={integration.picture || '/no-picture.jpg'}
-                          className="rounded-full"
+                          className={clsx(
+                            'rounded-full',
+                            isYoutube(integration.identifier) &&
+                              selectedAccounts.findIndex(
+                                (p) => p.id === integration.id
+                              ) === -1 &&
+                              'opacity-40'
+                          )}
                           alt={integration.identifier}
                           width={32}
                           height={32}
                         />
-                        {integration.identifier === 'youtube' ? (
-                          <img
-                            src="/icons/platforms/youtube.svg"
-                            className="absolute z-10 bottom-0 -end-[5px]"
-                            width={20}
-                          />
+                        {isYoutube(integration.identifier) ? (
+                          <YoutubeIcon className="absolute z-10 -bottom-[4px] -end-[8px]" />
                         ) : (
                           <SafeImage
                             src={`/icons/platforms/${integration.identifier}.png`}
@@ -282,22 +291,35 @@ export const PickPlatforms: FC<{
                         )}
                       >
                         <div className="flex items-center justify-center gap-[10px]">
-                          <div className="relative">
-                            <img
-                              src={integration.picture || '/no-picture.jpg'}
-                              className="rounded-full"
-                              alt={integration.identifier}
-                              width={24}
-                              height={24}
-                            />
-                            <SafeImage
-                              src={`/icons/platforms/${integration.identifier}.png`}
-                              className="rounded-full absolute z-10 -bottom-[5px] -end-[5px] border border-fifth"
-                              alt={integration.identifier}
-                              width={15}
-                              height={15}
-                            />
-                          </div>
+                          {isYoutube(integration.identifier) ? (
+                            <div className="flex items-center gap-[6px]">
+                              <img
+                                src={integration.picture || '/no-picture.jpg'}
+                                className="rounded-full"
+                                alt={integration.identifier}
+                                width={24}
+                                height={24}
+                              />
+                              <YoutubeIcon />
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <img
+                                src={integration.picture || '/no-picture.jpg'}
+                                className="rounded-full"
+                                alt={integration.identifier}
+                                width={24}
+                                height={24}
+                              />
+                              <SafeImage
+                                src={`/icons/platforms/${integration.identifier}.png`}
+                                className="rounded-full absolute z-10 -bottom-[5px] -end-[5px] border border-fifth"
+                                alt={integration.identifier}
+                                width={15}
+                                height={15}
+                              />
+                            </div>
+                          )}
                           <div>
                             {integration.name.slice(0, 10)}
                             {integration.name.length > 10 ? '...' : ''}

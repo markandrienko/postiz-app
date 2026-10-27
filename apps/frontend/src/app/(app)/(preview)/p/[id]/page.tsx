@@ -15,6 +15,10 @@ import { CopyClient } from '@gitroom/frontend/components/preview/copy.client';
 import { getT } from '@gitroom/react/translation/get.translation.service.backend';
 import { RenderPreviewDateClient } from '@gitroom/frontend/components/preview/render.preview.date.client';
 import { CreationMethodBadge } from '@gitroom/frontend/components/launches/creation.method.badge';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 dayjs.extend(utc);
 export const metadata: Metadata = {
@@ -123,13 +127,17 @@ export default async function Auth(
                           src={post[0].integration.picture}
                         />
                       </div>
-                      <div className="absolute -end-[5px] -bottom-[5px] w-[24px] h-[24px] z-[20]">
-                        <img
-                          className="w-full h-full bg-newBgColor aspect-square rounded-full"
-                          alt={post[0].integration.providerIdentifier}
-                          src={`/icons/platforms/${post[0].integration.providerIdentifier}.png`}
-                        />
-                      </div>
+                      {isYoutube(post[0].integration.providerIdentifier) ? (
+                        <YoutubeIcon className="absolute -end-[8px] -bottom-[5px] z-[21]" />
+                      ) : (
+                        <div className="absolute -end-[5px] -bottom-[5px] w-[24px] h-[24px] z-[20]">
+                          <img
+                            className="w-full h-full bg-newBgColor aspect-square rounded-full"
+                            alt={post[0].integration.providerIdentifier}
+                            src={`/icons/platforms/${post[0].integration.providerIdentifier}.png`}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex-1 flex flex-col gap-[8px] min-w-0">

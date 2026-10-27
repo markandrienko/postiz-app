@@ -13,6 +13,7 @@ import { useWatch } from 'react-hook-form';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { Select } from '@gitroom/react/form/select';
 import { YoutubePreview } from '@gitroom/frontend/components/new-launch/providers/youtube/youtube.preview';
+import { useVariables } from '@gitroom/react/helpers/variable.context';
 const type = [
   {
     label: 'Public',
@@ -40,6 +41,7 @@ const madeForKids = [
 ];
 const YoutubeSettings: FC = () => {
   const t = useT();
+  const { privacyPolicyUrl } = useVariables();
   const { register, control, setValue } = useSettings();
   // the thumbnail is set from the media settings now, older posts may still
   // carry one here, and it wins over the media thumbnail
@@ -114,6 +116,24 @@ const YoutubeSettings: FC = () => {
         {t(
           'youtube_upload_terms_notice_2',
           "Please be sure not to violate others' copyright or privacy rights."
+        )}
+        {/* YouTube API Services Developer Policies III.A.2: users agree to
+            the privacy policy, which explains the use of YouTube API data */}
+        {!!privacyPolicyUrl && (
+          <div className="mt-[8px]">
+            {t(
+              'youtube_upload_privacy_notice',
+              'By publishing to YouTube, you also agree to our Privacy Policy, which explains what data we access, store and use through YouTube API Services:'
+            )}{' '}
+            <a
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#B69DEC] hover:underline"
+              href={privacyPolicyUrl}
+            >
+              {privacyPolicyUrl}
+            </a>
+          </div>
         )}
       </div>
     </div>

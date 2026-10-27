@@ -62,6 +62,10 @@ import {
 } from '@gitroom/frontend/components/layout/set.timezone';
 import { Button } from '@gitroom/react/form/button';
 import { ChevronUpIcon } from '@gitroom/frontend/components/ui/icons';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 // Extend dayjs with necessary plugins
 extend(isSameOrAfter);
@@ -1145,11 +1149,17 @@ export const CalendarColumn: FC<{
               )}
               {display === 'day' && (
                 <div
-                  className={`w-full h-full rounded-[10px] py-[10px] flex-wrap hover:border hover:border-seventh flex justify-center items-center gap-[20px] mobile:gap-[12px] opacity-30 grayscale hover:grayscale-0 hover:opacity-100`}
+                  className={`group/slot w-full h-full rounded-[10px] py-[10px] flex-wrap hover:border hover:border-seventh flex justify-center items-center gap-[20px] mobile:gap-[12px]`}
                 >
                   {integrations.map((selectedIntegrations) => (
                     <div
-                      className="relative"
+                      className={clsx(
+                        'relative',
+                        // dimmed until hover; the YouTube icon must keep its
+                        // colors, so for YouTube only the avatar is
+                        !isYoutube(selectedIntegrations.identifier) &&
+                          'opacity-30 grayscale group-hover/slot:grayscale-0 group-hover/slot:opacity-100'
+                      )}
                       key={selectedIntegrations.identifier}
                     >
                       <div
@@ -1161,17 +1171,17 @@ export const CalendarColumn: FC<{
                           src={
                             selectedIntegrations.picture || '/no-picture.jpg'
                           }
-                          className="rounded-[8px]"
+                          className={clsx(
+                            'rounded-[8px]',
+                            isYoutube(selectedIntegrations.identifier) &&
+                              'opacity-30 grayscale group-hover/slot:grayscale-0 group-hover/slot:opacity-100'
+                          )}
                           alt={selectedIntegrations.identifier}
                           width={32}
                           height={32}
                         />
-                        {selectedIntegrations.identifier === 'youtube' ? (
-                          <img
-                            src="/icons/platforms/youtube.svg"
-                            className="absolute z-10 -bottom-[5px] -end-[5px]"
-                            width={20}
-                          />
+                        {isYoutube(selectedIntegrations.identifier) ? (
+                          <YoutubeIcon className="absolute z-10 -bottom-[5px] -end-[8px]" />
                         ) : (
                           <SafeImage
                             src={`/icons/platforms/${selectedIntegrations.identifier}.png`}
@@ -1399,23 +1409,43 @@ const CalendarItem: FC<{
           'relative',
           display === 'month' &&
             'mobile:p-[4px] mobile:rounded-[10px] mobile:justify-center',
-          isBeforeNow && '!grayscale'
+          // the YouTube icon must keep its colors: for YouTube posts the
+          // past-post grayscale goes on the avatar and the text instead
+          isBeforeNow &&
+            !isYoutube(post.integration?.providerIdentifier) &&
+            '!grayscale'
         )}
       >
-        <div className={clsx('relative min-w-[20px]')}>
-          <img
-            className="w-[20px] h-[20px] rounded-[8px]"
-            src={post.integration.picture! || '/no-picture.jpg'}
-          />
-          <img
-            className="w-[12px] h-[12px] rounded-[8px] absolute z-10 top-[10px] end-0 border border-fifth"
-            src={`/icons/platforms/${post.integration?.providerIdentifier}.png`}
-          />
-        </div>
+        {isYoutube(post.integration?.providerIdentifier) ? (
+          <div className="flex flex-col items-center gap-[2px] min-w-[28px]">
+            <img
+              className={clsx(
+                'w-[20px] h-[20px] rounded-[8px]',
+                isBeforeNow && 'grayscale'
+              )}
+              src={post.integration.picture! || '/no-picture.jpg'}
+            />
+            <YoutubeIcon />
+          </div>
+        ) : (
+          <div className={clsx('relative min-w-[20px]')}>
+            <img
+              className="w-[20px] h-[20px] rounded-[8px]"
+              src={post.integration.picture! || '/no-picture.jpg'}
+            />
+            <img
+              className="w-[12px] h-[12px] rounded-[8px] absolute z-10 top-[10px] end-0 border border-fifth"
+              src={`/icons/platforms/${post.integration?.providerIdentifier}.png`}
+            />
+          </div>
+        )}
         <div
           className={clsx(
             'w-full flex-1 flex flex-col min-h-[40px]',
-            display === 'month' && 'mobile:hidden'
+            display === 'month' && 'mobile:hidden',
+            isBeforeNow &&
+              isYoutube(post.integration?.providerIdentifier) &&
+              'grayscale'
           )}
         >
           <div className="text-start">

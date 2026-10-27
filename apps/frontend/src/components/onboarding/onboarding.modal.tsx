@@ -24,6 +24,10 @@ import {
   mcpConnectorUrls,
 } from '@gitroom/frontend/components/public-api/public.component';
 import { McpClientIcon } from '@gitroom/frontend/components/public-api/mcp.client.icons';
+import {
+  isYoutube,
+  YoutubeIcon,
+} from '@gitroom/frontend/components/ui/youtube.icon';
 
 interface OnboardingModalProps {
   onClose: () => void;
@@ -194,14 +198,17 @@ const OnboardingStep1: FC<{ onNext: () => void; onSkip: () => void }> = ({
                     width={28}
                     height={28}
                   />
-                  <SafeImage
-                    src={`/icons/platforms/${integration.identifier}.png`}
-                    className="rounded-full absolute -bottom-[3px] -end-[3px] border border-fifth"
-                    alt={integration.identifier}
-                    width={14}
-                    height={14}
-                  />
+                  {!isYoutube(integration.identifier) && (
+                    <SafeImage
+                      src={`/icons/platforms/${integration.identifier}.png`}
+                      className="rounded-full absolute -bottom-[3px] -end-[3px] border border-fifth"
+                      alt={integration.identifier}
+                      width={14}
+                      height={14}
+                    />
+                  )}
                 </div>
+                {isYoutube(integration.identifier) && <YoutubeIcon />}
                 <span className="text-[13px]">{integration.name}</span>
               </div>
             ))}
