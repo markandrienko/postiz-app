@@ -27,6 +27,10 @@ import { setHeartbeatDetails } from '@gitroom/nestjs-libraries/temporal/temporal
 import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorator';
 import { DashboardFunction } from '@gitroom/nestjs-libraries/integrations/dashboard.function.decorator';
 
+// The connected Google account has no access to the channel any more (the
+// channel was deleted, or the account no longer manages it)
+const CHANNEL_NOT_FOUND = 'Channel not found';
+
 const clientAndYoutube = () => {
   const client = new google.auth.OAuth2({
     clientId: process.env.YOUTUBE_CLIENT_ID,
@@ -321,13 +325,22 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       return `because your organization's Google Workspace session policy invalidated its access. Ask your Google Workspace admin to mark Postiz as a trusted app and turn on "Exempt trusted apps" (https://support.google.com/a/answer/9368756) to prevent this from happening again`;
     }
 
+    if (err?.message === CHANNEL_NOT_FOUND) {
+      return 'because the connected Google account can no longer reach this YouTube channel (it was deleted, or the account no longer manages it)';
+    }
+
     return undefined;
   }
 
-  // Google answers a refresh with a revoked, expired or otherwise unusable
-  // grant with invalid_grant; anything else (5xx, network) is temporary
+  // The access is gone when Google answers the refresh with invalid_grant
+  // (revoked, expired or otherwise unusable grant), or when the refresh works
+  // but the channel is no longer there for that account (reConnect). Anything
+  // else (5xx, network) is temporary.
   refreshErrorRevoked(err: any) {
-    return err?.response?.data?.error === 'invalid_grant';
+    return (
+      err?.response?.data?.error === 'invalid_grant' ||
+      err?.message === CHANNEL_NOT_FOUND
+    );
   }
 
   async refreshToken(refresh_token: string): Promise<AuthTokenDetails> {
@@ -445,7 +458,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       const channel = response.data.items?.[0];
 
       if (!channel) {
-        throw new Error('Channel not found');
+        throw new Error(CHANNEL_NOT_FOUND);
       }
 
       return {
@@ -477,7 +490,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     });
 
     if (!(data.items || []).some((p) => p.id === requiredId)) {
-      throw new Error('Channel not found');
+      throw new Error(CHANNEL_NOT_FOUND);
     }
 
     const information = await this.fetchPageInformation(accessToken, {

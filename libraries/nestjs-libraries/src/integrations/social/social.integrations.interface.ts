@@ -185,9 +185,10 @@ export interface SocialProvider
   stripLinks?: () => boolean;
   refreshCron?: boolean;
   refreshErrorMessage?(err: any): string | undefined;
-  // True when a token refresh failed because the access is gone (revoked or
-  // expired grant), not because of a temporary error: the data retention
-  // workflow only marks a channel as disconnected on such a failure.
+  // True when a token refresh (or the reConnect check after it) failed
+  // because the access is gone (revoked or expired grant, account or channel
+  // no longer reachable), not because of a temporary error: the data
+  // retention workflow only marks a channel as disconnected on such a failure.
   refreshErrorRevoked?(err: any): boolean;
   dto?: any;
   maxLength: (additionalSettings?: any, settings?: any) => number;
