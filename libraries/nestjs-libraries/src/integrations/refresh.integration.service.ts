@@ -46,10 +46,11 @@ export class RefreshIntegrationService {
 
   // Data retention (periodicDataRefresh platforms): the same token refresh as
   // refresh(), but it also stores the account's current name, picture and
-  // username, which refresh() keeps unchanged. A failed refresh only marks the
-  // channel as disconnected (and notifies) when the provider reports the
-  // access as gone (refreshErrorRevoked), never on a temporary error, and
-  // never again for a channel already marked (`silent`).
+  // username, which refresh() keeps unchanged. A failed refresh - or a token
+  // refresh that works for an account that can't reach the channel any more
+  // (reConnect) - only marks the channel as disconnected (and notifies) when
+  // the provider reports the access as gone (refreshErrorRevoked), never on a
+  // temporary error, and never again for a channel already marked (`silent`).
   async refreshAccountData(
     integration: Integration,
     silent = false
@@ -57,14 +58,28 @@ export class RefreshIntegrationService {
     const socialProvider = this._integrationManager.getSocialIntegration(
       integration.providerIdentifier
     );
+    const accessGone = (err: any) =>
+      !silent && !!socialProvider.refreshErrorRevoked?.(err);
 
-    const refresh = await this.refreshProcess(
-      integration,
-      socialProvider,
-      '',
-      (refreshError) =>
-        !silent && !!socialProvider.refreshErrorRevoked?.(refreshError)
-    );
+    let refresh: false | AuthTokenDetails;
+    try {
+      refresh = await this.refreshProcess(
+        integration,
+        socialProvider,
+        '',
+        accessGone
+      );
+    } catch (err) {
+      // refreshProcess throws when reConnect fails after a working token
+      // refresh (or on a database error); anything but a gone channel is
+      // retried by the next run
+      if (!accessGone(err)) {
+        throw err;
+      }
+
+      await this.markDisconnected(integration, socialProvider, err);
+      return false as const;
+    }
 
     if (!refresh) {
       return false as const;
@@ -102,6 +117,28 @@ export class RefreshIntegrationService {
       });
   }
 
+  private async markDisconnected(
+    integration: Integration,
+    socialProvider: SocialProvider,
+    refreshError: any,
+    cause = ''
+  ) {
+    // informAboutRefreshError (with the failure cause) already notifies
+    // the user, and refreshNeeded sets the same flag disconnectChannel
+    // would — calling disconnectChannel here sent a second, cause-less
+    // copy of the same email for every failed refresh.
+    await this._integrationService.refreshNeeded(
+      integration.organizationId,
+      integration.id
+    );
+
+    await this._integrationService.informAboutRefreshError(
+      integration.organizationId,
+      integration,
+      socialProvider.refreshErrorMessage?.(refreshError) || cause
+    );
+  }
+
   private async refreshProcess(
     integration: Integration,
     socialProvider: SocialProvider,
@@ -129,19 +166,11 @@ export class RefreshIntegrationService {
         return false;
       }
 
-      // informAboutRefreshError (with the failure cause) already notifies
-      // the user, and refreshNeeded sets the same flag disconnectChannel
-      // would — calling disconnectChannel here sent a second, cause-less
-      // copy of the same email for every failed refresh.
-      await this._integrationService.refreshNeeded(
-        integration.organizationId,
-        integration.id
-      );
-
-      await this._integrationService.informAboutRefreshError(
-        integration.organizationId,
+      await this.markDisconnected(
         integration,
-        socialProvider.refreshErrorMessage?.(refreshError) || cause
+        socialProvider,
+        refreshError,
+        cause
       );
 
       return false;

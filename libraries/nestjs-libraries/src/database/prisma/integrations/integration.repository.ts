@@ -1,4 +1,7 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import {
+  PrismaRepository,
+  PrismaTransaction,
+} from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import dayjs from 'dayjs';
@@ -20,7 +23,8 @@ export class IntegrationRepository {
     private _plugs: PrismaRepository<'plugs'>,
     private _exisingPlugData: PrismaRepository<'exisingPlugData'>,
     private _customers: PrismaRepository<'customer'>,
-    private _mentions: PrismaRepository<'mentions'>
+    private _mentions: PrismaRepository<'mentions'>,
+    private _transaction: PrismaTransaction
   ) {}
 
   getMentions(platform: string, q: string) {
@@ -1039,37 +1043,45 @@ export class IntegrationRepository {
   // and the ids of its published posts). The channel row, its internal ids and
   // its posts stay, so reconnecting the same channel stores fresh data again.
   // The selection is checked again in the update: a channel reconnected in
-  // the meantime is left alone. Returns whether the channel was cleared.
-  async clearChannelData(id: string, providers: string[], cutoff: Date) {
-    const { count } = await this._integration.model.integration.updateMany({
-      where: {
-        AND: [{ id }, this.channelsToClearWhere(providers, cutoff)],
-      },
-      data: {
-        token: '',
-        refreshToken: null,
-        picture: null,
-        profile: null,
-        name: CLEARED_CHANNEL_NAME,
-      },
-    });
+  // the meantime is left alone. One transaction: if clearing the posts fails,
+  // the channel keeps its data too, so the next run selects it again.
+  // Returns whether the channel was cleared.
+  clearChannelData(id: string, providers: string[], cutoff: Date) {
+    return this._transaction.model.$transaction(
+      async (tx) => {
+        const { count } = await tx.integration.updateMany({
+          where: {
+            AND: [{ id }, this.channelsToClearWhere(providers, cutoff)],
+          },
+          data: {
+            token: '',
+            refreshToken: null,
+            picture: null,
+            profile: null,
+            name: CLEARED_CHANNEL_NAME,
+          },
+        });
 
-    if (!count) {
-      return false;
-    }
+        if (!count) {
+          return false;
+        }
 
-    await this._posts.model.post.updateMany({
-      where: {
-        integrationId: id,
-        OR: [{ releaseId: { not: null } }, { releaseURL: { not: null } }],
-      },
-      data: {
-        releaseId: null,
-        releaseURL: null,
-      },
-    });
+        await tx.post.updateMany({
+          where: {
+            integrationId: id,
+            OR: [{ releaseId: { not: null } }, { releaseURL: { not: null } }],
+          },
+          data: {
+            releaseId: null,
+            releaseURL: null,
+          },
+        });
 
-    return true;
+        return true;
+      },
+      // a channel with many posts must not hit Prisma's default 5s limit
+      { maxWait: 10_000, timeout: 30_000 }
+    );
   }
 
   countChannelsWithPicture(picture: string, excludeId: string) {
