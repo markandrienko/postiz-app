@@ -174,7 +174,15 @@ export const Menu: FC<{
   const deleteChannel = useCallback(async () => {
     if (
       !(await deleteDialog(
-        t('are_you_sure_delete_channel', 'Are you sure you want to delete this channel?'),
+        // YouTube API Services Developer Policies III.E.4.g: the delete
+        // option must say that it doesn't touch the data on the platform
+        `${t(
+          'are_you_sure_delete_channel',
+          'Are you sure you want to delete this channel?'
+        )} ${t(
+          'delete_channel_data_notice',
+          'This deletes the channel and its data from this service only, nothing on the platform itself: posts and videos already published stay there, delete them on the platform if you want them removed.'
+        )}`,
         t('delete_channel_title', 'Delete Channel')
       ))
     ) {

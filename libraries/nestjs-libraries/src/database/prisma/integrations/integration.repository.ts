@@ -8,6 +8,9 @@ import { IntegrationTimeDto } from '@gitroom/nestjs-libraries/dtos/integrations/
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { PlugDto } from '@gitroom/nestjs-libraries/dtos/plugs/plug.dto';
 
+// The name a channel keeps once its platform data is cleared (data retention)
+const CLEARED_CHANNEL_NAME = 'Disconnected channel';
+
 @Injectable()
 export class IntegrationRepository {
   private storage = UploadFactory.createStorage();
@@ -397,6 +400,20 @@ export class IntegrationRepository {
         refreshNeeded: false,
       },
     });
+
+    // a channel whose data was cleared (data retention) gets its real name
+    // back when it is connected again; other channels keep their stored name
+    if (upsert.name === CLEARED_CHANNEL_NAME && name) {
+      await this._integration.model.integration.updateMany({
+        where: {
+          id: upsert.id,
+          name: CLEARED_CHANNEL_NAME,
+        },
+        data: {
+          name,
+        },
+      });
+    }
 
     if (oneTimeToken) {
       const rootId =
@@ -810,11 +827,23 @@ export class IntegrationRepository {
     });
   }
 
-  countOtherActiveIntegrations(providerIdentifier: string, excludeId: string) {
+  // Other active channels that may use the same platform grant: connected
+  // through the same platform account (same rootInternalId, e.g. the same
+  // Google account for YouTube), or older ones without a rootInternalId.
+  // Revoking the token would cut their access too. Without a rootInternalId
+  // every active channel of the provider counts.
+  countOtherActiveIntegrations(
+    providerIdentifier: string,
+    rootInternalId: string | null,
+    excludeId: string
+  ) {
     return this._integration.model.integration.count({
       where: {
         providerIdentifier,
         deletedAt: null,
+        ...(rootInternalId
+          ? { OR: [{ rootInternalId }, { rootInternalId: null }] }
+          : {}),
         id: {
           not: excludeId,
         },
@@ -822,7 +851,7 @@ export class IntegrationRepository {
     });
   }
 
-  deleteChannel(org: string, id: string) {
+  deleteChannel(org: string, id: string, clearTokens = false) {
     return this._integration.model.integration.update({
       select: {
         id: true,
@@ -833,6 +862,223 @@ export class IntegrationRepository {
       },
       data: {
         deletedAt: new Date(),
+        // periodicDataRefresh platforms: a deleted channel keeps no
+        // credentials (the platform access is revoked before, from the values
+        // already read)
+        ...(clearTokens ? { token: '', refreshToken: null } : {}),
+      },
+    });
+  }
+
+  // Data retention ------------------------------------------------------------
+
+  // A page of the channels of the given providers that hold tokens to
+  // refresh: connected ones and ones marked as disconnected
+  getChannelsForDataRefresh(
+    providers: string[],
+    cursor: string | null,
+    take: number
+  ) {
+    return this._integration.model.integration.findMany({
+      where: {
+        providerIdentifier: {
+          in: providers,
+        },
+        deletedAt: null,
+        inBetweenSteps: false,
+        refreshToken: {
+          not: null,
+        },
+        ...(cursor ? { id: { gt: cursor } } : {}),
+      },
+      select: {
+        id: true,
+        organizationId: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      take,
+    });
+  }
+
+  // Stores a token refresh with the account's current name, picture and
+  // username. updateMany: a channel deleted meanwhile is left alone.
+  updateRefreshedAccountData(
+    id: string,
+    data: {
+      token: string;
+      refreshToken?: string;
+      expiresIn?: number;
+      name?: string;
+      picture?: string;
+      profile?: string;
+    }
+  ) {
+    return this._integration.model.integration.updateMany({
+      where: {
+        id,
+        deletedAt: null,
+      },
+      data: {
+        token: data.token,
+        // never wipe a stored refresh token with an empty one
+        ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
+        ...(data.expiresIn
+          ? { tokenExpiration: new Date(Date.now() + data.expiresIn * 1000) }
+          : {}),
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.picture ? { picture: data.picture } : {}),
+        ...(data.profile !== undefined ? { profile: data.profile } : {}),
+      },
+    });
+  }
+
+  async getPublishedReleaseIds(integrationId: string) {
+    const posts = await this._posts.model.post.findMany({
+      where: {
+        integrationId,
+        deletedAt: null,
+        state: 'PUBLISHED',
+        releaseId: {
+          not: null,
+        },
+      },
+      select: {
+        releaseId: true,
+      },
+    });
+
+    return [...new Set(posts.map((post) => post.releaseId!))];
+  }
+
+  // The platform no longer has these posts: drop their id and link
+  clearReleaseIds(integrationId: string, releaseIds: string[]) {
+    return this._posts.model.post.updateMany({
+      where: {
+        integrationId,
+        releaseId: {
+          in: releaseIds,
+        },
+      },
+      data: {
+        releaseId: null,
+        releaseURL: null,
+      },
+    });
+  }
+
+  // Channels of the given providers whose platform data must be cleared:
+  // deleted ones, and ones that stayed disconnected (or never finished
+  // connecting) with no successful token refresh since the cutoff. Only
+  // channels that still hold any of that data.
+  private channelsToClearWhere(
+    providers: string[],
+    cutoff: Date
+  ): Prisma.IntegrationWhereInput {
+    return {
+      providerIdentifier: {
+        in: providers,
+      },
+      AND: [
+        {
+          OR: [
+            {
+              deletedAt: {
+                not: null,
+              },
+            },
+            {
+              deletedAt: null,
+              OR: [{ refreshNeeded: true }, { inBetweenSteps: true }],
+              AND: [
+                {
+                  OR: [
+                    {
+                      tokenExpiration: {
+                        lt: cutoff,
+                      },
+                    },
+                    {
+                      tokenExpiration: null,
+                      updatedAt: {
+                        lt: cutoff,
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          OR: [
+            { token: { not: '' } },
+            { refreshToken: { not: null } },
+            { picture: { not: null } },
+            { profile: { not: null } },
+            { name: { not: CLEARED_CHANNEL_NAME } },
+          ],
+        },
+      ],
+    };
+  }
+
+  getChannelsToClear(providers: string[], cutoff: Date) {
+    return this._integration.model.integration.findMany({
+      where: this.channelsToClearWhere(providers, cutoff),
+      select: {
+        id: true,
+        picture: true,
+      },
+      take: 500,
+    });
+  }
+
+  // Clears the platform data a channel holds (tokens, name, picture, username
+  // and the ids of its published posts). The channel row, its internal ids and
+  // its posts stay, so reconnecting the same channel stores fresh data again.
+  // The selection is checked again in the update: a channel reconnected in
+  // the meantime is left alone. Returns whether the channel was cleared.
+  async clearChannelData(id: string, providers: string[], cutoff: Date) {
+    const { count } = await this._integration.model.integration.updateMany({
+      where: {
+        AND: [{ id }, this.channelsToClearWhere(providers, cutoff)],
+      },
+      data: {
+        token: '',
+        refreshToken: null,
+        picture: null,
+        profile: null,
+        name: CLEARED_CHANNEL_NAME,
+      },
+    });
+
+    if (!count) {
+      return false;
+    }
+
+    await this._posts.model.post.updateMany({
+      where: {
+        integrationId: id,
+        OR: [{ releaseId: { not: null } }, { releaseURL: { not: null } }],
+      },
+      data: {
+        releaseId: null,
+        releaseURL: null,
+      },
+    });
+
+    return true;
+  }
+
+  countChannelsWithPicture(picture: string, excludeId: string) {
+    return this._integration.model.integration.count({
+      where: {
+        picture,
+        id: {
+          not: excludeId,
+        },
       },
     });
   }

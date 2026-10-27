@@ -44,6 +44,40 @@ export class RefreshIntegrationService {
     return refresh;
   }
 
+  // Data retention (periodicDataRefresh platforms): the same token refresh as
+  // refresh(), but it also stores the account's current name, picture and
+  // username, which refresh() keeps unchanged. A failed refresh only marks the
+  // channel as disconnected (and notifies) when the provider reports the
+  // access as gone (refreshErrorRevoked), never on a temporary error, and
+  // never again for a channel already marked (`silent`).
+  async refreshAccountData(
+    integration: Integration,
+    silent = false
+  ): Promise<false | AuthTokenDetails> {
+    const socialProvider = this._integrationManager.getSocialIntegration(
+      integration.providerIdentifier
+    );
+
+    const refresh = await this.refreshProcess(
+      integration,
+      socialProvider,
+      '',
+      (refreshError) =>
+        !silent && !!socialProvider.refreshErrorRevoked?.(refreshError)
+    );
+
+    if (!refresh) {
+      return false as const;
+    }
+
+    await this._integrationService.saveRefreshedAccountData(
+      integration,
+      refresh
+    );
+
+    return refresh;
+  }
+
   public async setBetweenSteps(integration: Integration, cause = '') {
     await this._integrationService.setBetweenRefreshSteps(integration.id);
     await this._integrationService.informAboutRefreshError(
@@ -71,7 +105,9 @@ export class RefreshIntegrationService {
   private async refreshProcess(
     integration: Integration,
     socialProvider: SocialProvider,
-    cause = ''
+    cause = '',
+    // whether a failed refresh marks the channel as disconnected and notifies
+    shouldNotify: (refreshError: any) => boolean = () => true
   ): Promise<AuthTokenDetails | false> {
     let refreshError: any = undefined;
     const refresh: false | AuthTokenDetails = await socialProvider
@@ -87,6 +123,10 @@ export class RefreshIntegrationService {
           `Could not refresh ${integration.providerIdentifier} integration ${integration.id}`,
           refreshError?.response?.data || refreshError?.message || refreshError
         );
+      }
+
+      if (!shouldNotify(refreshError)) {
+        return false;
       }
 
       // informAboutRefreshError (with the failure cause) already notifies

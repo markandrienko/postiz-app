@@ -9,6 +9,7 @@ import { IntegrationRepository } from '@gitroom/nestjs-libraries/database/prisma
 import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
 import {
   AnalyticsData,
+  AuthTokenDetails,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { Integration, Organization } from '@prisma/client';
@@ -113,14 +114,7 @@ export class IntegrationService {
     timezone?: number,
     customInstanceDetails?: string
   ) {
-    const uploadedPicture = picture
-      ? picture?.indexOf('imagedelivery.net') > -1
-        ? picture
-        : await this.storage.uploadSimple(picture).catch((err) => {
-            console.log('Failed to upload profile picture:', picture, err);
-            return undefined;
-          })
-      : undefined;
+    const uploadedPicture = await this.uploadPicture(picture);
 
     return this._integrationRepository.createOrUpdateIntegration(
       additionalSettings,
@@ -140,6 +134,23 @@ export class IntegrationService {
       timezone,
       customInstanceDetails
     );
+  }
+
+  // Stores a copy of the platform's profile picture (not for images already
+  // on Cloudflare Images); undefined when it can't be stored
+  private async uploadPicture(picture?: string) {
+    if (!picture) {
+      return undefined;
+    }
+
+    if (picture.indexOf('imagedelivery.net') > -1) {
+      return picture;
+    }
+
+    return this.storage.uploadSimple(picture).catch((err) => {
+      console.log('Failed to upload profile picture:', picture, err);
+      return undefined;
+    });
   }
 
   updateIntegrationGroup(org: string, id: string, group: string) {
@@ -399,14 +410,27 @@ export class IntegrationService {
 
   async deleteChannel(org: string, id: string) {
     await this.revokeChannelAccess(org, id);
-    return this._integrationRepository.deleteChannel(org, id);
+
+    // periodicDataRefresh platforms keep no tokens of a deleted channel
+    const integration = await this._integrationRepository.getIntegrationById(
+      org,
+      id
+    );
+    const clearTokens =
+      !!integration &&
+      !!this._integrationManager.getSocialIntegration(
+        integration.providerIdentifier
+      )?.periodicDataRefresh;
+
+    return this._integrationRepository.deleteChannel(org, id, clearTokens);
   }
 
   // Some platforms (YouTube, TikTok) require the app to revoke its access as
   // soon as the user disconnects a channel. A platform revoke can drop the
   // whole grant of the user (e.g. every channel connected with the same Google
-  // account), so it only runs when no other active channel of that provider
-  // exists. Best effort: it never blocks or fails deleting the channel.
+  // account), so it only runs when no other active channel was connected
+  // through the same platform account. Best effort: it never blocks or fails
+  // deleting the channel.
   private async revokeChannelAccess(org: string, id: string) {
     try {
       const integration = await this._integrationRepository.getIntegrationById(
@@ -427,6 +451,7 @@ export class IntegrationService {
       const others =
         await this._integrationRepository.countOtherActiveIntegrations(
           integration.providerIdentifier,
+          integration.rootInternalId,
           integration.id
         );
       if (others > 0) {
@@ -441,6 +466,191 @@ export class IntegrationService {
     } catch (err) {
       console.log('Failed to revoke channel access:', id, err);
     }
+  }
+
+  // Data retention (dataRetentionWorkflow) ----------------------------------
+
+  private periodicDataRefreshProviders() {
+    return this._integrationManager
+      .getAllowedSocialsIntegrations()
+      .filter(
+        (identifier) =>
+          !!this._integrationManager.getSocialIntegration(identifier)
+            ?.periodicDataRefresh
+      );
+  }
+
+  // Refreshes one page of channels (refreshChannelData) and returns the cursor
+  // of the next page, or null after the last one
+  async refreshChannelsData(cursor: string | null) {
+    const providers = this.periodicDataRefreshProviders();
+    if (!providers.length) {
+      return null;
+    }
+
+    const take = 50;
+    const channels = await this._integrationRepository.getChannelsForDataRefresh(
+      providers,
+      cursor,
+      take
+    );
+
+    for (const channel of channels) {
+      await this.refreshChannelData(channel.organizationId, channel.id);
+    }
+
+    return channels.length === take ? channels[channels.length - 1].id : null;
+  }
+
+  // Refreshes a channel's token, name and picture, then clears the ids of its
+  // published posts the platform no longer has. A channel marked as
+  // disconnected is refreshed silently and stays marked until the user
+  // reconnects it; while its token still works its data is kept fresh and is
+  // not cleared. Never throws: what fails is retried by the next daily run.
+  private async refreshChannelData(org: string, id: string) {
+    try {
+      const integration =
+        await this._integrationRepository.getIntegrationById(org, id);
+      if (
+        !integration ||
+        integration.deletedAt ||
+        integration.inBetweenSteps ||
+        !integration.refreshToken
+      ) {
+        return;
+      }
+
+      const provider = this._integrationManager.getSocialIntegration(
+        integration.providerIdentifier
+      );
+      if (!provider?.periodicDataRefresh) {
+        return;
+      }
+
+      const refresh = await this._refreshIntegrationService.refreshAccountData(
+        integration,
+        integration.refreshNeeded
+      );
+      if (!refresh || !provider.missingReleaseIds) {
+        return;
+      }
+
+      const releaseIds = await this._integrationRepository.getPublishedReleaseIds(
+        id
+      );
+      if (!releaseIds.length) {
+        return;
+      }
+
+      const missing = await provider.missingReleaseIds(
+        refresh.accessToken,
+        releaseIds,
+        integration
+      );
+      if (missing.length) {
+        await this._integrationRepository.clearReleaseIds(id, missing);
+      }
+    } catch (err) {
+      console.log('Data retention: could not refresh channel', id, err);
+    }
+  }
+
+  // Stores a token refresh with the account's current name, picture and
+  // username; the replaced picture copy is removed
+  async saveRefreshedAccountData(
+    integration: Integration,
+    details: AuthTokenDetails
+  ) {
+    const picture = await this.uploadPicture(details.picture);
+
+    const { count } =
+      await this._integrationRepository.updateRefreshedAccountData(
+        integration.id,
+        {
+          token: details.accessToken,
+          refreshToken: details.refreshToken,
+          expiresIn: details.expiresIn,
+          name: details.name,
+          picture,
+          profile: details.username,
+        }
+      );
+
+    // deleted meanwhile: the new copy is not used by anything
+    if (!count) {
+      await this.removeChannelPicture(integration.id, picture);
+      return;
+    }
+
+    if (picture && integration.picture !== picture) {
+      await this.removeChannelPicture(integration.id, integration.picture);
+    }
+  }
+
+  // Clears the platform data of periodicDataRefresh channels that were
+  // deleted, or that had no successful token refresh for 21 days (access
+  // revoked at the platform, or connecting never finished): within the 30 days
+  // YouTube allows after a revocation (Developer Policies III.D.2.c).
+  // tokenExpiration only moves on a successful refresh, so it dates the last
+  // one; refreshChannelData keeps it fresh while a token still works.
+  async clearExpiredChannelData() {
+    const providers = this.periodicDataRefreshProviders();
+    if (!providers.length) {
+      return;
+    }
+
+    const cutoff = dayjs().subtract(21, 'day').toDate();
+    const channels = await this._integrationRepository.getChannelsToClear(
+      providers,
+      cutoff
+    );
+
+    for (const channel of channels) {
+      try {
+        const cleared = await this._integrationRepository.clearChannelData(
+          channel.id,
+          providers,
+          cutoff
+        );
+        if (cleared) {
+          await this.removeChannelPicture(channel.id, channel.picture);
+        }
+      } catch (err) {
+        console.log('Data retention: could not clear channel', channel.id, err);
+      }
+    }
+  }
+
+  // Removes a picture copy this app stored (uploadPicture), never a platform's
+  // own URL, and only when no other channel uses it
+  private async removeChannelPicture(
+    excludeId: string,
+    picture?: string | null
+  ) {
+    const storedPrefixes = [
+      process.env.CLOUDFLARE_BUCKET_URL,
+      process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/uploads/` : '',
+    ].filter(Boolean) as string[];
+
+    if (
+      !picture ||
+      !storedPrefixes.some((prefix) => picture.startsWith(prefix))
+    ) {
+      return;
+    }
+
+    if (
+      await this._integrationRepository.countChannelsWithPicture(
+        picture,
+        excludeId
+      )
+    ) {
+      return;
+    }
+
+    await this.storage.removeFile(picture).catch((err) => {
+      console.log('Could not remove channel picture:', picture, err);
+    });
   }
 
   async disableIntegrations(org: string, totalChannels: number) {
