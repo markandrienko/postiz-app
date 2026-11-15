@@ -2,7 +2,6 @@
 
 import { FC } from 'react';
 import clsx from 'clsx';
-import SafeImage from '@gitroom/react/helpers/safe.image';
 import { useLaunchStore } from '@gitroom/frontend/components/new-launch/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useExistingData } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
@@ -10,20 +9,23 @@ import ImageWithFallback from '@gitroom/react/helpers/image.with.fallback';
 import { Check } from '@gitroom/frontend/components/launches/tags.component';
 import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
 import {
-  isYoutube,
-  YoutubeIcon,
-} from '@gitroom/frontend/components/ui/youtube.icon';
+  isBrandMark,
+  PlatformIcon,
+} from '@gitroom/frontend/components/ui/platform.icon.component';
 
-const PlatformBadge: FC<{ integration: Integrations }> = ({ integration }) => {
-  return isYoutube(integration.identifier) ? (
-    <YoutubeIcon className="absolute z-10 -bottom-[2px] -end-[8px]" />
-  ) : (
-    <SafeImage
-      src={`/icons/platforms/${integration.identifier}.png`}
-      className="rounded-[4px] absolute z-10 bottom-0 -end-[5px] min-w-[16px] min-h-[16px]"
-      alt={integration.identifier}
-      width={16}
-      height={16}
+const PlatformBadge: FC<{ integration: Integrations; inactive?: boolean }> = ({
+  integration,
+  inactive,
+}) => {
+  return (
+    <PlatformIcon
+      identifier={integration.identifier}
+      size={16}
+      inactive={inactive}
+      className="absolute z-10 bottom-0 -end-[5px]"
+      iconClassName="rounded-[4px] min-w-[16px] min-h-[16px]"
+      // a brand mark hangs a little off the corner, to hide less of the picture
+      markClassName="-mb-[4px] -me-[4px] bg-newBgColorInner"
     />
   );
 };
@@ -33,19 +35,17 @@ export const IntegrationListRow: FC<{
   integration: Integrations;
   selected: boolean;
   onClick: () => void;
-  locked?: boolean;
-}> = ({ integration, selected, onClick, locked }) => {
-  // the YouTube icon must keep its colors: when locked, a YouTube row dims
-  // everything but the icon instead of the whole row
-  const youtube = isYoutube(integration.identifier);
-  const dimParts = locked && youtube && 'opacity-50';
-
+  dimmed?: boolean;
+}> = ({ integration, selected, onClick, dimmed }) => {
+  // a brand mark can't be dimmed with its row (see isBrandMark)
+  const dimParts =
+    isBrandMark(integration.identifier) && dimmed && 'opacity-50';
   return (
     <div
       onClick={onClick}
       className={clsx(
         'flex items-center gap-[12px] py-[8px] cursor-pointer select-none',
-        locked && !youtube && 'opacity-50'
+        !isBrandMark(integration.identifier) && dimmed && 'opacity-50'
       )}
     >
       <div className="relative">
@@ -57,7 +57,7 @@ export const IntegrationListRow: FC<{
           width={40}
           height={40}
         />
-        <PlatformBadge integration={integration} />
+        <PlatformBadge integration={integration} inactive={dimmed} />
       </div>
       <div
         className={clsx(
@@ -122,68 +122,79 @@ export const PicksSocialsComponent: FC<{
         {availableIntegrations.map((integration) => (
           <IntegrationListRow
             key={integration.id}
-            locked={locked}
             integration={integration}
             selected={selectedIntegrations.some(
               (p) => p.integration.id === integration.id
             )}
             onClick={toggleIntegration(integration)}
+            dimmed={locked}
           />
         ))}
       </div>
     );
   }
 
+  // an unselected channel is grayed out and a locked one faded, as a whole. A
+  // brand mark can't be: only its avatar is (see isBrandMark)
+  const dimChannel = (integration: Integrations) =>
+    clsx(
+      selectedIntegrations.findIndex(
+        (p) => p.integration.id === integration.id
+      ) === -1 && 'grayscale',
+      locked && 'opacity-50'
+    );
+
   return (
     <div className={clsx('flex', locked && 'pointer-events-none')}>
       <div className="flex flex-1">
         <div className="innerComponent flex-1 flex">
           <div className="flex flex-wrap gap-[12px] flex-1">
-            {availableIntegrations.map((integration) => {
-              const youtube = isYoutube(integration.identifier);
-              const notSelected =
-                selectedIntegrations.findIndex(
-                  (p) => p.integration.id === integration.id
-                ) === -1;
-
-              return (
+            {availableIntegrations.map((integration) => (
+              <div
+                key={integration.id}
+                className="flex gap-[8px] items-center"
+                {...(toolTip && {
+                  'data-tooltip-id': 'tooltip',
+                  'data-tooltip-content': integration.name,
+                })}
+              >
                 <div
-                  key={integration.id}
-                  className="flex gap-[8px] items-center"
-                  {...(toolTip && {
-                    'data-tooltip-id': 'tooltip',
-                    'data-tooltip-content': integration.name,
-                  })}
+                  onClick={toggleIntegration(integration)}
+                  className={clsx(
+                    'cursor-pointer border-[2px] relative rounded-full flex justify-center items-center bg-fifth filter transition-all duration-500',
+                    selectedIntegrations.findIndex(
+                      (p) => p.integration.id === integration.id
+                    ) === -1
+                      ? 'border-transparent'
+                      : 'border-[#622FF6]',
+                    !isBrandMark(integration.identifier) &&
+                      dimChannel(integration)
+                  )}
                 >
-                  <div
-                    onClick={toggleIntegration(integration)}
+                  <ImageWithFallback
+                    fallbackSrc="/no-picture.jpg"
+                    src={integration.picture || '/no-picture.jpg'}
                     className={clsx(
-                      'cursor-pointer border-[2px] relative rounded-full flex justify-center items-center bg-fifth filter transition-all duration-500',
-                      notSelected ? 'border-transparent' : 'border-[#622FF6]',
-                      // the YouTube icon must keep its colors, so for YouTube
-                      // only the avatar is grayed out or dimmed
-                      !youtube && notSelected && 'grayscale',
-                      !youtube && locked && 'opacity-50'
+                      'rounded-full transition-all min-w-[42px] border-[1.5px] min-h-[42px]',
+                      selectedIntegrations.findIndex(
+                        (p) => p.integration.id === integration.id
+                      ) === -1
+                        ? 'border-transparent'
+                        : 'border-[#000]',
+                      isBrandMark(integration.identifier) &&
+                        dimChannel(integration)
                     )}
-                  >
-                    <ImageWithFallback
-                      fallbackSrc="/no-picture.jpg"
-                      src={integration.picture || '/no-picture.jpg'}
-                      className={clsx(
-                        'rounded-full transition-all min-w-[42px] border-[1.5px] min-h-[42px]',
-                        notSelected ? 'border-transparent' : 'border-[#000]',
-                        youtube && notSelected && 'grayscale',
-                        youtube && locked && 'opacity-50'
-                      )}
-                      alt={integration.identifier}
-                      width={42}
-                      height={42}
-                    />
-                    <PlatformBadge integration={integration} />
-                  </div>
+                    alt={integration.identifier}
+                    width={42}
+                    height={42}
+                  />
+                  <PlatformBadge
+                    integration={integration}
+                    inactive={!!dimChannel(integration)}
+                  />
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       </div>

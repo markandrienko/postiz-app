@@ -7,14 +7,14 @@ import {
 } from '@gitroom/frontend/components/new-launch/store';
 import clsx from 'clsx';
 import SafeImage from '@gitroom/react/helpers/safe.image';
+import {
+  isBrandMark,
+  PlatformIcon,
+} from '@gitroom/frontend/components/ui/platform.icon.component';
 import { useShallow } from 'zustand/react/shallow';
 import { GlobalIcon } from '@gitroom/frontend/components/ui/icons';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import {
-  isYoutube,
-  YoutubeIcon,
-} from '@gitroom/frontend/components/ui/youtube.icon';
 import { useExistingData } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
 import {
   useDecisionModal,
@@ -105,7 +105,6 @@ export const SelectCurrent: FC = () => {
           ref={contentRef}
           className={clsx(
             'flex gap-[6px] mobile:gap-[4px] w-full overflow-x-auto scrollbar scrollbar-thumb-tableBorder scrollbar-track-secondary mobile:scrollbar-none',
-            // dimmed per item below: the YouTube icon must keep its colors
             locked && 'pointer-events-none'
           )}
         >
@@ -118,10 +117,10 @@ export const SelectCurrent: FC = () => {
               }}
               className={clsx(
                 'cursor-pointer flex gap-[8px] rounded-[8px] w-[40px] h-[40px] mobile:w-[44px] mobile:h-[44px] mobile:shrink-0 justify-center items-center bg-newBgLineColor mobile:bg-newSettings',
-                locked && 'opacity-50',
                 current !== 'global'
                   ? 'text-[#A3A3A3]'
-                  : 'border mobile:border-[1.5px] border-[#FC69FF] text-[#FC69FF]'
+                  : 'border mobile:border-[1.5px] border-[#FC69FF] text-[#FC69FF]',
+                locked && 'opacity-50'
               )}
             >
               <div>
@@ -129,6 +128,9 @@ export const SelectCurrent: FC = () => {
               </div>
             </div>
           )}
+          {/* a locked tab is dimmed, a brand mark can't be: only its avatar is
+              (see isBrandMark). It is also bigger than the avatar of a tab, so
+              it sits next to it, in a wider tab */}
           {selectedIntegrations.map(({ integration }) => (
             <div
               onClick={() => {
@@ -138,12 +140,10 @@ export const SelectCurrent: FC = () => {
               key={integration.id}
               className={clsx(
                 'border mobile:border-[1.5px] cursor-pointer relative flex gap-[8px] h-[40px] mobile:h-[44px] mobile:shrink-0 rounded-[8px] items-center bg-newBgLineColor mobile:bg-newSettings justify-center',
-                // the YouTube icon (at least 20px high) sits next to the
-                // avatar, not over it, so the chip is wider
-                isYoutube(integration.identifier)
-                  ? 'w-[68px] mobile:w-[72px] shrink-0'
+                isBrandMark(integration.identifier)
+                  ? 'px-[6px] shrink-0'
                   : 'w-[40px] mobile:w-[44px]',
-                locked && !isYoutube(integration.identifier) && 'opacity-50',
+                !isBrandMark(integration.identifier) && locked && 'opacity-50',
                 current === integration.id
                   ? 'border-[#FC69FF] text-[#FC69FF]'
                   : 'border-transparent'
@@ -168,14 +168,16 @@ export const SelectCurrent: FC = () => {
                 }}
                 className={clsx(
                   'relative w-full h-full rounded-full flex justify-center items-center filter transition-all duration-500',
-                  isYoutube(integration.identifier) && 'gap-[4px]'
+                  isBrandMark(integration.identifier) && 'gap-[6px]'
                 )}
               >
                 <SafeImage
                   src={integration.picture || '/no-picture.jpg'}
                   className={clsx(
                     'rounded-full min-w-[26px]',
-                    locked && isYoutube(integration.identifier) && 'opacity-50'
+                    isBrandMark(integration.identifier) &&
+                      locked &&
+                      'opacity-50'
                   )}
                   alt={integration.identifier}
                   width={26}
@@ -185,17 +187,17 @@ export const SelectCurrent: FC = () => {
                     e.currentTarget.srcset = '/no-picture.jpg';
                   }}
                 />
-                {isYoutube(integration.identifier) ? (
-                  <YoutubeIcon />
-                ) : (
-                  <SafeImage
-                    src={`/icons/platforms/${integration.identifier}.png`}
-                    className="min-w-[12px] min-h-[12px] rounded-[3px] absolute z-10 bottom-[6px] end-[6px]"
-                    alt={integration.identifier}
-                    width={12}
-                    height={12}
-                  />
-                )}
+                <PlatformIcon
+                  identifier={integration.identifier}
+                  size={12}
+                  inactive={locked}
+                  className={clsx(
+                    !isBrandMark(integration.identifier) &&
+                      'absolute z-10 bottom-[6px] end-[6px]'
+                  )}
+                  iconClassName="min-w-[12px] min-h-[12px] rounded-[3px]"
+                  markClassName="bg-newBgLineColor mobile:bg-newSettings"
+                />
               </div>
             </div>
           ))}

@@ -3,9 +3,9 @@
 import {
   AddProviderButton,
   CustomVariables,
+  useExtensionConnect,
 } from '@gitroom/frontend/components/launches/add.provider.component';
 import { FC, useCallback, useEffect, useMemo, useState } from 'react';
-import SafeImage from '@gitroom/react/helpers/safe.image';
 import { capitalize, groupBy, orderBy } from 'lodash';
 import { CalendarWeekProvider } from '@gitroom/frontend/components/launches/calendar.context';
 import { Filters } from '@gitroom/frontend/components/launches/filters';
@@ -17,6 +17,10 @@ import { Menu } from '@gitroom/frontend/components/launches/menu/menu';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Integration } from '@prisma/client';
 import ImageWithFallback from '@gitroom/react/helpers/image.with.fallback';
+import {
+  isBrandMark,
+  PlatformIcon,
+} from '@gitroom/frontend/components/ui/platform.icon.component';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useFireEvents } from '@gitroom/helpers/utils/use.fire.events';
 import { Calendar } from './calendar';
@@ -34,10 +38,6 @@ import { HubspotInstalled } from '@gitroom/frontend/components/launches/hubspot.
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { Input } from '@gitroom/react/form/input';
 import { Button } from '@gitroom/react/form/button';
-import {
-  isYoutube,
-  YoutubeIcon,
-} from '@gitroom/frontend/components/ui/youtube.icon';
 
 export const SVGLine = () => {
   return (
@@ -379,10 +379,9 @@ export const MenuComponent: FC<
       <div
         className={clsx(
           'relative gap-[6px] flex justify-center items-center',
-          // the YouTube icon must keep its colors, so it is dimmed on the avatar only
-          integration.disabled &&
-            !isYoutube(integration.identifier) &&
-            'opacity-50'
+          isBrandMark(integration.identifier)
+            ? 'isolate'
+            : integration.disabled && 'opacity-50'
         )}
       >
         <div className="h-full w-[4px] -ms-[12px] rounded-s-[3px] opacity-0 group-hover/profile:opacity-100 transition-opacity">
@@ -393,11 +392,11 @@ export const MenuComponent: FC<
             className="absolute start-0 top-0 w-[39px] h-[46px] cursor-pointer"
             onClick={
               integration.refreshNeeded
-                ? refreshChannel(integration)
+                ? undefined
                 : continueIntegration(integration)
             }
           >
-            <div className="bg-red-500 w-[15px] h-[15px] rounded-full start-[5px] top-[5px] absolute z-[200] text-[10px] flex justify-center items-center">
+            <div className="bg-red-500 w-[15px] h-[15px] rounded-full -start-[7px] top-[5px] absolute z-[200] text-[10px] flex justify-center items-center">
               !
             </div>
             <div className="bg-primary/60 w-[39px] h-[46px] start-0 top-0 absolute rounded-full z-[199]" />
@@ -408,27 +407,30 @@ export const MenuComponent: FC<
           src={integration.picture || '/no-picture.jpg'}
           className={clsx(
             'rounded-[8px] min-w-[36px] min-h-[36px]',
-            integration.disabled &&
-              isYoutube(integration.identifier) &&
+            isBrandMark(integration.identifier) &&
+              integration.disabled &&
               'opacity-50'
           )}
           alt={integration.identifier}
           width={36}
           height={36}
         />
-        {isYoutube(integration.identifier) ? (
-          // above the reconnect overlay (z-[199]) so it is never covered;
-          // clicks pass through to the overlay
-          <YoutubeIcon className="absolute z-[201] pointer-events-none -bottom-[4px] -end-[8px]" />
-        ) : (
-          <SafeImage
-            src={`/icons/platforms/${integration.identifier}.png`}
-            className="rounded-[8px] absolute z-10 bottom-[5px] -end-[5px] border border-fifth"
-            alt={integration.identifier}
-            width={18.41}
-            height={18.41}
-          />
-        )}
+        {/* a brand mark stays above the reconnect overlay (z-[199]), the
+            wrapper is isolated so it stays under the tooltips, and it hangs a
+            little off the corner to hide less of the picture */}
+        <PlatformIcon
+          identifier={integration.identifier}
+          size={18.41}
+          inactive={integration.disabled}
+          channel={
+            integration.refreshNeeded || integration.inBetweenSteps
+              ? undefined
+              : integration.internalId
+          }
+          className="absolute bottom-[5px] -end-[5px]"
+          iconClassName="z-10 rounded-[8px] border border-fifth"
+          markClassName="z-[201] -mb-[5px] -me-[3px] transition-all bg-newBgColorInner group-hover/profile:bg-boxHover"
+        />
       </div>
       <div
         // @ts-ignore
@@ -557,11 +559,13 @@ export const LaunchesComponent = () => {
     },
     []
   );
+  const extensionConnect = useExtensionConnect();
   const refreshChannel = useCallback(
     (
         integration: Integration & {
           identifier: string;
           isCustomFields?: boolean;
+          isChromeExtension?: boolean;
           customFields?: any[];
         }
       ) =>
@@ -582,6 +586,13 @@ export const LaunchesComponent = () => {
                 variables={integration.customFields || []}
               />
             ),
+          });
+          return;
+        }
+
+        if (integration.isChromeExtension) {
+          await extensionConnect(integration.identifier, {
+            refresh: integration.internalId,
           });
           return;
         }
@@ -777,13 +788,8 @@ export const LaunchesComponent = () => {
                 {sortedIntegrations.slice(0, 3).map((integration: any) => (
                   <ImageWithFallback
                     key={integration.id}
-                    fallbackSrc={
-                      // the YouTube icon can't be cropped round or overlapped
-                      isYoutube(integration.identifier)
-                        ? '/no-picture.jpg'
-                        : `/icons/platforms/${integration.identifier}.png`
-                    }
-                    src={integration.picture}
+                    fallbackSrc={`/icons/platforms/${integration.identifier}.png`}
+                    src={integration.picture || '/no-picture.jpg'}
                     className="rounded-full border-2 border-btnSimple"
                     alt={integration.identifier}
                     width={24}

@@ -4,15 +4,11 @@ import React, { FC, Fragment, useCallback, useMemo } from 'react';
 import { useLaunchStore } from '@gitroom/frontend/components/new-launch/store';
 import { useShallow } from 'zustand/react/shallow';
 import clsx from 'clsx';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import { PlatformIcon } from '@gitroom/frontend/components/ui/platform.icon.component';
 import { capitalize } from 'lodash';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { hasLinks } from '@gitroom/helpers/utils/strip.links';
 import { countLength } from '@gitroom/helpers/utils/count.length';
-import {
-  isYoutube,
-  YoutubeIcon,
-} from '@gitroom/frontend/components/ui/youtube.icon';
 
 const Valid: FC = () => {
   return (
@@ -268,17 +264,12 @@ export const InformationComponent: FC<{
               {selectedIntegrations.map((p, index) => (
                 <Fragment key={p.integration.id}>
                   <div>
-                    {isYoutube(p.integration.identifier) ? (
-                      <YoutubeIcon />
-                    ) : (
-                      <SafeImage
-                        src={`/icons/platforms/${p.integration.identifier}.png`}
-                        alt={p.integration.name}
-                        className="rounded-[4px] w-[16px] h-[16px] min-w-[16px] min-h-[16px]"
-                        width={16}
-                        height={16}
-                      />
-                    )}
+                    <PlatformIcon
+                      identifier={p.integration.identifier}
+                      size={16}
+                      channel={p.integration.internalId}
+                      iconClassName="rounded-[4px] w-[16px] h-[16px] min-w-[16px] min-h-[16px]"
+                    />
                   </div>
                   <div
                     className={clsx(
