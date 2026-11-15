@@ -72,7 +72,6 @@ import { useHasScroll } from '@gitroom/frontend/components/ui/is.scroll.hook';
 import { useShortlinkPreference } from '@gitroom/frontend/components/settings/shortlink-preference.component';
 import dayjs from 'dayjs';
 import { Button } from '@gitroom/react/form/button';
-import SafeImage from '@gitroom/react/helpers/safe.image';
 import { useClickOutside } from '@mantine/hooks';
 import {
   MediaSettingsSection,
@@ -1596,29 +1595,48 @@ const ChannelsChecklist: FC<{
             }
             className={clsx(
               'py-[10px] text-[14px] font-[500] flex items-center gap-[10px] cursor-pointer select-none',
-              p.locked && 'opacity-50 pointer-events-none'
+              p.locked && 'pointer-events-none',
+              // a brand mark can't be dimmed, the avatar and the text are
+              // instead (see isBrandMark)
+              p.locked && !isBrandMark(p.identifier) && 'opacity-50'
             )}
           >
             <div className={clsx(p.locked && 'invisible')}>
               <Check onChange={() => {}} value={ids.includes(p.id)} />
             </div>
-            <div className="relative shrink-0">
+            <div
+              className={clsx(
+                'relative shrink-0 flex items-center',
+                isBrandMark(p.identifier) && 'gap-[6px]'
+              )}
+            >
               <img
-                className="w-[24px] h-[24px] rounded-full"
+                className={clsx(
+                  'w-[24px] h-[24px] rounded-full',
+                  isBrandMark(p.identifier) && p.locked && 'opacity-50'
+                )}
                 src={p.picture || '/no-picture.jpg'}
                 alt=""
               />
               {!!p.identifier && (
-                <SafeImage
-                  src={`/icons/platforms/${p.identifier}.png`}
-                  className="rounded-full absolute z-10 -bottom-[5px] -end-[5px] border border-fifth"
-                  alt={p.identifier}
-                  width={15}
-                  height={15}
+                <PlatformIcon
+                  identifier={p.identifier}
+                  size={15}
+                  inactive={p.locked}
+                  className={clsx(
+                    !isBrandMark(p.identifier) &&
+                      'absolute z-10 -bottom-[5px] -end-[5px]'
+                  )}
+                  iconClassName="rounded-full border border-fifth"
                 />
               )}
             </div>
-            <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-[10px]">
+            <div
+              className={clsx(
+                'flex-1 min-w-0 flex flex-wrap items-center gap-x-[10px]',
+                isBrandMark(p.identifier) && p.locked && 'opacity-50'
+              )}
+            >
               <div className="truncate max-w-full">{p.name}</div>
               <div className="text-[12px] opacity-60">
                 {[
