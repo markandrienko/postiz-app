@@ -179,7 +179,7 @@ export const AgentList: FC<{ onChange: (arr: any[]) => void }> = ({
                 </div>
                 <ImageWithFallback
                   fallbackSrc={`/icons/platforms/${integration.identifier}.png`}
-                  src={integration.picture}
+                  src={integration.picture || '/no-picture.jpg'}
                   className={clsx(
                     'rounded-[8px]',
                     isBrandMark(integration.identifier) &&
