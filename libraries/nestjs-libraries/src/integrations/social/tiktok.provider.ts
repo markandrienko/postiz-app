@@ -24,6 +24,7 @@ import { createReadStream } from 'fs';
 import { getSsrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
 import { Integration } from '@prisma/client';
 import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorator';
+import { DashboardFunction } from '@gitroom/nestjs-libraries/integrations/dashboard.function.decorator';
 
 @Rules(
   [
@@ -479,7 +480,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
   // privacy levels it allows, interactions disabled in the TikTok app, and the
   // maximum video duration. When TikTok refuses the query because the account
   // cannot post right now (e.g. spam_risk_too_many_posts), canPost is false and
-  // error carries the reason to show the user.
+  // error carries the reason to show the user. /integrations/function only
+  // runs methods marked @DashboardFunction (or @Tool).
+  @DashboardFunction()
   async creatorInfo(accessToken: string) {
     try {
       const body = await (
