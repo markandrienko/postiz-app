@@ -915,6 +915,20 @@ export class IntegrationRepository {
     });
   }
 
+  // The platform of a channel, without its tokens: deleting a channel must
+  // work even when its stored tokens can't be decrypted
+  getChannelProvider(org: string, id: string) {
+    return this._integration.model.integration.findFirst({
+      where: {
+        organizationId: org,
+        id,
+      },
+      select: {
+        providerIdentifier: true,
+      },
+    });
+  }
+
   deleteChannel(org: string, id: string, clearTokens = false) {
     return this._integration.model.integration.update({
       select: {

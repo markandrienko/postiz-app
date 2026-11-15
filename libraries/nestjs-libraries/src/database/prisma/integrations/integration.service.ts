@@ -421,7 +421,7 @@ export class IntegrationService {
     await this.revokeChannelAccess(org, id);
 
     // periodicDataRefresh platforms keep no tokens of a deleted channel
-    const integration = await this._integrationRepository.getIntegrationById(
+    const integration = await this._integrationRepository.getChannelProvider(
       org,
       id
     );
