@@ -5,7 +5,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { capitalize, orderBy } from 'lodash';
 import clsx from 'clsx';
 import ImageWithFallback from '@gitroom/react/helpers/image.with.fallback';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import {
+  isBrandMark,
+  PlatformIcon,
+} from '@gitroom/frontend/components/ui/platform.icon.component';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { RenderAnalytics } from '@gitroom/frontend/components/platform-analytics/render.analytics';
 import { Select } from '@gitroom/react/form/select';
@@ -16,10 +19,6 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import useCookie from 'react-use-cookie';
 import { SVGLine } from '@gitroom/frontend/components/launches/launches.component';
-import {
-  isYoutube,
-  YoutubeIcon,
-} from '@gitroom/frontend/components/ui/youtube.icon';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 const allowedIntegrations = [
   'facebook',
@@ -212,96 +211,97 @@ export const PlatformAnalytics = () => {
             </div>
           </div>
           <div className="flex gap-[15px] mobile:gap-[12px] flex-col mobile:flex-row mobile:overflow-x-auto mobile:ps-[12px] mobile:pt-[6px] mobile:pb-[6px] scrollbar scrollbar-thumb-fifth scrollbar-track-newBgColor">
-            {sortedIntegrations.map((integration, index) => {
-              const youtube = isYoutube(integration.identifier);
-              const notCurrent = currentIntegration.id !== integration.id;
-              // the YouTube icon must keep its colors: for YouTube the avatar
-              // and the name are dimmed instead of the whole row
-              const youtubeDim = notCurrent
-                ? integration.disabled
-                  ? 'opacity-10 group-hover/profile:opacity-50'
-                  : 'opacity-20 group-hover/profile:opacity-100'
-                : integration.disabled && 'opacity-50';
-
-              return (
+            {sortedIntegrations.map((integration, index) => (
+              <div
+                key={integration.id}
+                onClick={() => {
+                  if (integration.refreshNeeded) {
+                    toaster.show(
+                      'Please reconnect the channel from the calendar',
+                      'warning'
+                    );
+                    return;
+                  }
+                  setRefresh(true);
+                  setTimeout(() => {
+                    setRefresh(false);
+                  }, 10);
+                  setCurrent(index);
+                }}
+                className={clsx(
+                  'flex gap-[12px] items-center group/profile justify-center hover:bg-boxHover rounded-e-[8px] mobile:shrink-0',
+                  currentIntegration.id !== integration.id && 'cursor-pointer',
+                  currentIntegration.id !== integration.id &&
+                    !isBrandMark(integration.identifier) &&
+                    'opacity-20 hover:opacity-100'
+                )}
+              >
+                {/* a brand mark can't be dimmed with its row: the avatar and
+                    the name are instead (see isBrandMark) */}
                 <div
-                  key={integration.id}
-                  onClick={() => {
-                    if (integration.refreshNeeded) {
-                      toaster.show(
-                        'Please refresh the integration from the calendar',
-                        'warning'
-                      );
-                      return;
-                    }
-                    setRefresh(true);
-                    setTimeout(() => {
-                      setRefresh(false);
-                    }, 10);
-                    setCurrent(index);
-                  }}
                   className={clsx(
-                    'flex gap-[12px] items-center group/profile justify-center hover:bg-boxHover rounded-e-[8px] mobile:shrink-0',
-                    notCurrent && 'cursor-pointer',
-                    notCurrent && !youtube && 'opacity-20 hover:opacity-100'
+                    'relative rounded-full flex justify-center items-center gap-[6px]',
+                    isBrandMark(integration.identifier)
+                      ? 'isolate'
+                      : integration.disabled && 'opacity-50'
                   )}
                 >
-                  <div
-                    className={clsx(
-                      'relative rounded-full flex justify-center items-center gap-[6px]',
-                      integration.disabled && !youtube && 'opacity-50'
-                    )}
-                  >
-                    {(integration.inBetweenSteps ||
-                      integration.refreshNeeded) && (
-                      <div className="absolute start-0 top-0 w-[39px] h-[46px] cursor-pointer">
-                        <div className="bg-red-500 w-[15px] h-[15px] rounded-full start-0 top-[5px] absolute z-[200] text-[10px] flex justify-center items-center">
-                          !
-                        </div>
-                        <div className="bg-primary/60 w-[39px] h-[46px] start-0 top-0 absolute rounded-full z-[199]" />
+                  {(integration.inBetweenSteps ||
+                    integration.refreshNeeded) && (
+                    <div className="absolute start-0 top-0 w-[39px] h-[46px] cursor-pointer">
+                      <div className="bg-red-500 w-[15px] h-[15px] rounded-full -start-[7px] top-[5px] absolute z-[200] text-[10px] flex justify-center items-center">
+                        !
                       </div>
-                    )}
-                    <div className="h-full w-[4px] -ms-[12px] rounded-s-[3px] opacity-0 group-hover/profile:opacity-100 transition-opacity">
-                      <SVGLine />
+                      <div className="bg-primary/60 w-[39px] h-[46px] start-0 top-0 absolute rounded-full z-[199]" />
                     </div>
-                    <ImageWithFallback
-                      fallbackSrc={
-                        youtube
-                          ? '/no-picture.jpg'
-                          : `/icons/platforms/${integration.identifier}.png`
-                      }
-                      src={integration.picture}
-                      className={clsx('rounded-[8px]', youtube && youtubeDim)}
-                      alt={integration.identifier}
-                      width={36}
-                      height={36}
-                    />
-                    {youtube ? (
-                      // above the reconnect overlay (z-[199]) so it is never covered
-                      <YoutubeIcon className="absolute z-[201] pointer-events-none -bottom-[4px] -end-[8px]" />
-                    ) : (
-                      <SafeImage
-                        src={`/icons/platforms/${integration.identifier}.png`}
-                        className="rounded-[8px] absolute z-10 bottom-[5px] -end-[5px] border border-fifth"
-                        alt={integration.identifier}
-                        width={18.41}
-                        height={18.41}
-                      />
-                    )}
+                  )}
+                  <div className="h-full w-[4px] -ms-[12px] rounded-s-[3px] opacity-0 group-hover/profile:opacity-100 transition-opacity">
+                    <SVGLine />
                   </div>
-                  <div
+                  <ImageWithFallback
+                    fallbackSrc={`/icons/platforms/${integration.identifier}.png`}
+                    src={integration.picture}
                     className={clsx(
-                      'flex-1 whitespace-nowrap text-ellipsis overflow-hidden group-[.sidebar]:hidden mobile:hidden',
-                      youtube
-                        ? youtubeDim
-                        : integration.disabled && 'opacity-50'
+                      'rounded-[8px]',
+                      isBrandMark(integration.identifier) &&
+                        (currentIntegration.id !== integration.id
+                          ? 'opacity-20 group-hover/profile:opacity-100'
+                          : integration.disabled && 'opacity-50')
                     )}
-                  >
-                    {integration.name}
-                  </div>
+                    alt={integration.identifier}
+                    width={36}
+                    height={36}
+                  />
+                  {/* a brand mark stays above the reconnect overlay (z-[199]),
+                      the wrapper is isolated so it stays under the tooltips,
+                      it hangs a little off the corner to hide less of the
+                      picture, and in a faded row it only shows with the hover */}
+                  <PlatformIcon
+                    identifier={integration.identifier}
+                    size={18.41}
+                    inactive={integration.disabled}
+                    className="absolute bottom-[5px] -end-[5px]"
+                    iconClassName="z-10 rounded-[8px] border border-fifth"
+                    markClassName={clsx(
+                      'z-[201] -mb-[5px] -me-[3px] bg-newBgColorInner group-hover/profile:bg-boxHover',
+                      currentIntegration.id !== integration.id &&
+                        'hidden group-hover/profile:flex'
+                    )}
+                  />
                 </div>
-              );
-            })}
+                <div
+                  className={clsx(
+                    'flex-1 whitespace-nowrap text-ellipsis overflow-hidden group-[.sidebar]:hidden mobile:hidden',
+                    currentIntegration.id !== integration.id &&
+                      isBrandMark(integration.identifier)
+                      ? 'opacity-20 group-hover/profile:opacity-100'
+                      : integration.disabled && 'opacity-50'
+                  )}
+                >
+                  {integration.name}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
